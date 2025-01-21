@@ -1,0 +1,15 @@
+# Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
+_commit: v4.3.7
+_src_path: https://github.com/jupyterlab/extension-template
+author_email: milan.la.riviere@student.uva.nl
+author_name: MilanLR
+has_binder: false
+has_settings: false
+kind: frontend
+labextension_name: ExploratoryJupyterExtension
+project_short_description: A JupyterLab extension to give better support for exploratory
+    programming.
+python_name: ExploratoryJupyterExtension
+repository: https://github.com/MilanLR/ExploratoryJupyterExtension
+test: true
+
