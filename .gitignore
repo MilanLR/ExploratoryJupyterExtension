@@ -123,3 +123,8 @@ dmypy.json
 
 # Yarn cache
 .yarn/
+
+
+
+.virtual_documents/
+Untitled*.ipynb

@@ -1,0 +1,19 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "shell",
+			"label": "yarn start",
+			"command": "yarn",
+			"args": [
+				"start"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}/ThesisAlternatives/Verdant"
+			},
+			"presentation": {
+				"reveal": "silent"
+			}
+		}
+	]
+}

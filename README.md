@@ -7,6 +7,7 @@ A JupyterLab extension to give better support for exploratory programming.
 ## Requirements
 
 - JupyterLab >= 4.0.0
+- [conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/linux.html)
 
 ## Install
 
