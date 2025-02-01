@@ -1,6 +1,46 @@
 import { Widget } from '@lumino/widgets';
 import { DataSet, Network, Edge, Node, Options } from 'vis-network/standalone';
-// import { DataSet } from 'vis-data';
+
+interface NotebookCell {
+  id: string;
+  cell_type: 'code' | 'markdown'; // Specify the possible cell types
+  source: string;
+  metadata: {
+    trusted: boolean;
+  };
+  outputs: any[];
+  execution_count: number | null;
+}
+
+interface LanguageInfo {
+  codemirror_mode: {
+    name: string;
+    version: number;
+  };
+  file_extension: string;
+  mimetype: string;
+  name: string;
+  nbconvert_exporter: string;
+  pygments_lexer: string;
+  version: string;
+}
+
+interface KernelSpec {
+  display_name: string;
+  language: string;
+  name: string;
+}
+
+export interface NotebookData {
+  metadata: {
+    kernelspec: KernelSpec;
+    language_info: LanguageInfo;
+  };
+  nbformat_minor: number;
+  nbformat: number;
+  cells: NotebookCell[];
+}
+
 export class GraphWidget extends Widget {
   private network: Network;
   private nodes: any;
@@ -16,6 +56,7 @@ export class GraphWidget extends Widget {
 
     // Create a container for our content
     this._content = document.createElement('div');
+    this._content.className = 'jp-GraphWidget-content';
     this.node.appendChild(this._content);
 
     // Show initial message
@@ -25,8 +66,7 @@ export class GraphWidget extends Widget {
     this.edges = new DataSet([]);
 
     const container = document.createElement('div');
-    container.style.width = '100%';
-    container.style.height = '100%';
+    container.className = 'jp-GraphWidget-container';
     this.node.appendChild(container);
 
     const data = {
@@ -35,19 +75,6 @@ export class GraphWidget extends Widget {
     };
 
     const options: Options = {
-      manipulation: {
-        enabled: true,
-        addNode: (data: Node, callback: (data: Node) => {}) => {
-          data.label = 'Node ' + (this.nodes.length + 1);
-          callback(data);
-        },
-        addEdge: (data: Edge, callback: (data: Edge) => {}) => {
-          if (data.from != data.to) {
-            callback(data);
-          } else {
-          }
-        }
-      },
       physics: {
         enabled: false
       },
@@ -66,56 +93,65 @@ export class GraphWidget extends Widget {
       }
     };
 
-    const addButton = document.createElement('button');
-    addButton.textContent = 'Add Node';
-    addButton.style.position = 'absolute';
-    addButton.style.top = '10px';
-    addButton.style.right = '10px';
-    addButton.onclick = () => {
-      const newNode = {
-        id: this.nodes.length + 1,
-        label: 'Node ' + (this.nodes.length + 1)
-      };
-      this.nodes.add(newNode);
-    };
-    this.node.appendChild(addButton);
-
     this.network = new Network(container, data, options);
-
-    // // Restore the state from local storage
-    // this.restoreState();
-
-    // // Save the state before the window is unloaded
-    // window.addEventListener('beforeunload', () => this.saveState());
   }
 
-  // private saveState() {
-  //   const state = {
-  //     nodes: this.nodes.get(),
-  //     edges: this.edges.get()
-  //   };
-  //   localStorage.setItem('graphWidgetState', JSON.stringify(state));
-  //   console.log(state);
-  // }
-
-  // private restoreState() {
-  //   const state = localStorage.getItem('graphWidgetState');
-  //   if (state) {
-  //     console.log(state);
-  //     const { nodes, edges } = JSON.parse(state);
-  //     this.nodes.add(nodes);
-  //     this.edges.add(edges);
-  //   }
-  // }
-
-  updateNotebook(notebookData: INotebookModel): void {
+  updateNotebook(notebookData: any): void {
     console.log('Widget received notebook data:', notebookData);
-    this._content.innerHTML = '<div>Notebook loaded! Processing data...</div>';
-    // Here you can process and display the notebook data as needed
+
+    if (!notebookData) {
+      this.clearNotebook();
+      return;
+    }
+
+    // Parse the notebook data into our typed interface
+    const notebook = notebookData as NotebookData;
+
+    // Clear existing nodes
+    this.nodes.clear();
+    this.edges.clear();
+
+    // Create a node for each cell
+    const cells = notebook.cells;
+    console.log('Cells:', cells);
+    for (let i = 0; i < cells.length; i++) {
+      const cell = cells[i];
+      console.log('Cell:', cell);
+
+      const cellContent = cell.source;
+      console.log('Cell content:', cellContent);
+
+      const cellType = cell.cell_type;
+      const truncatedContent =
+        cellContent.slice(0, 20) + (cellContent.length > 20 ? '...' : '');
+
+      const newNode = {
+        id: i + 1,
+        label: `${cellType}\n${truncatedContent || `Cell ${i + 1}`}`,
+        level: i,
+        color: cellType === 'code' ? '#8dd3c7' : '#fb8072'
+      };
+
+      console.log('Adding node:', newNode);
+      this.nodes.add(newNode);
+
+      // Add edge to previous cell
+      if (i > 0) {
+        const newEdge = {
+          from: i,
+          to: i + 1
+        };
+        console.log('Adding edge:', newEdge);
+        this.edges.add(newEdge);
+      }
+    }
+
+    // Update status message
+    this._content.innerHTML = `<div style="text-align: center;">Loaded ${cells.length} cells</div>`;
   }
 
   clearNotebook(): void {
     this._content.innerHTML =
-      '<div>Please open a notebook to start using this extension</div>';
+      '<div style="text-align: center;">Please open a notebook to start using this extension</div>';
   }
 }

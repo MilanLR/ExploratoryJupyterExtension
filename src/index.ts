@@ -5,16 +5,8 @@ import {
 } from '@jupyterlab/application';
 import { ICommandPalette, WidgetTracker } from '@jupyterlab/apputils';
 import { INotebookTracker } from '@jupyterlab/notebook';
-import { GraphWidget } from './graphs/graphWidget';
-
-interface APODResponse {
-  copyright: string;
-  date: string;
-  explanation: string;
-  media_type: 'video' | 'image';
-  title: string;
-  url: string;
-}
+import { GraphWidget, NotebookData } from './graphs/graphWidget';
+import '../style/base.css';
 
 /**
  * Initialization data for the ExploratoryJupyterExtension extension.
@@ -46,22 +38,66 @@ const activateGraph = function (
   notebookTracker: INotebookTracker
 ) {
   let widget: GraphWidget;
-  widget = new GraphWidget();
+  const command = 'graph-widget:open';
 
-  // Add the widget to the left area with an icon
-  app.shell.add(widget, 'left', {
-    rank: 900
+  // Add an application command
+  app.commands.addCommand(command, {
+    label: 'Show Graph Widget',
+    execute: () => {
+      if (!widget || widget.isDisposed) {
+        // Create a new widget if one does not exist
+        // or if the previous one was disposed
+        widget = new GraphWidget();
+
+        // Add the widget to the left area
+        app.shell.add(widget, 'left', {
+          rank: 900
+        });
+
+        // Track the widget for restoration
+        widgetTracker.add(widget);
+
+        // Initial check for open notebook
+        const current = notebookTracker.currentWidget;
+        if (current && current.content.model) {
+          console.log('Initial notebook loaded');
+          widget.updateNotebook(current.content.model.toJSON());
+        } else {
+          widget.clearNotebook();
+        }
+
+        // Set up notebook change listeners
+        setupNotebookListeners(widget, notebookTracker);
+      }
+      widget.show();
+    }
   });
 
-  // Initial check for open notebook
-  const current = notebookTracker.currentWidget;
-  if (current && current.content.model) {
-    console.log('Initial notebook loaded');
-    widget.updateNotebook(current.content.model.toJSON());
-  } else {
-    widget.clearNotebook();
+  // Track widget instance for state restoration
+  const widgetTracker = new WidgetTracker<GraphWidget>({
+    namespace: 'graph-widget'
+  });
+
+  if (restorer) {
+    // Register the widget with the layout restorer
+    restorer.restore(widgetTracker, {
+      command,
+      name: () => 'graph-widget'
+    });
   }
 
+  // Add the command to the palette
+  palette.addItem({ command, category: 'Tutorial' });
+
+  // Execute the command once during initialization
+  app.commands.execute(command);
+};
+
+// Helper function to set up notebook listeners
+function setupNotebookListeners(
+  widget: GraphWidget,
+  notebookTracker: INotebookTracker
+) {
   // Listen for notebook changes
   notebookTracker.currentChanged.connect(() => {
     const current = notebookTracker.currentWidget;
@@ -75,7 +111,7 @@ const activateGraph = function (
         console.log(
           'Notebook content changed - cells modified, added, or deleted'
         );
-        widget.updateNotebook(current.content.model.toJSON());
+        widget.updateNotebook(current.content.model?.toJSON());
       });
     } else {
       console.log('No notebook open, clearing widget');
@@ -91,28 +127,6 @@ const activateGraph = function (
       widget.updateNotebook(current.content.model.toJSON());
     }
   });
-
-  const openGraphCommand = 'graph-widget:open';
-  app.commands.addCommand(openGraphCommand, {
-    label: 'Show Graph Widget',
-    execute: () => {
-      widget.show();
-    }
-  });
-
-  // Add the command to the palette.
-  palette.addItem({ command: openGraphCommand, category: 'Tutorial' });
-
-  const widgetTracker = new WidgetTracker<GraphWidget>({
-    namespace: 'graph-widget'
-  });
-
-  widgetTracker.add(widget);
-
-  restorer.restore(widgetTracker, {
-    command: 'graph-widget:open',
-    name: () => 'graph-widget'
-  });
-};
+}
 
 export default plugin;
