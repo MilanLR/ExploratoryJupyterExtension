@@ -5,12 +5,21 @@ export class GraphWidget extends Widget {
   private network: Network;
   private nodes: any;
   private edges: any;
+  private _content: HTMLElement;
 
   constructor() {
     super();
+    this.addClass('jp-GraphWidget');
     this.id = 'graph-widget';
-    this.title.label = 'Graph Widget';
+    this.title.label = 'Graph View';
     this.title.closable = true;
+
+    // Create a container for our content
+    this._content = document.createElement('div');
+    this.node.appendChild(this._content);
+
+    // Show initial message
+    this.clearNotebook();
 
     this.nodes = new DataSet([]);
     this.edges = new DataSet([]);
@@ -98,4 +107,15 @@ export class GraphWidget extends Widget {
   //     this.edges.add(edges);
   //   }
   // }
+
+  updateNotebook(notebookData: INotebookModel): void {
+    console.log('Widget received notebook data:', notebookData);
+    this._content.innerHTML = '<div>Notebook loaded! Processing data...</div>';
+    // Here you can process and display the notebook data as needed
+  }
+
+  clearNotebook(): void {
+    this._content.innerHTML =
+      '<div>Please open a notebook to start using this extension</div>';
+  }
 }

@@ -32,7 +32,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
     tracker: INotebookTracker,
     restorer: ILayoutRestorer
   ) => {
-    activateGraph(app, palette, restorer);
+    activateGraph(app, palette, restorer, tracker);
     console.log(
       'JupyterLab extension ExploratoryJupyterExtension is activated!'
     );
@@ -42,7 +42,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
 const activateGraph = function (
   app: JupyterFrontEnd,
   palette: ICommandPalette,
-  restorer: ILayoutRestorer
+  restorer: ILayoutRestorer,
+  notebookTracker: INotebookTracker
 ) {
   let widget: GraphWidget;
   widget = new GraphWidget();
@@ -50,6 +51,45 @@ const activateGraph = function (
   // Add the widget to the left area with an icon
   app.shell.add(widget, 'left', {
     rank: 900
+  });
+
+  // Initial check for open notebook
+  const current = notebookTracker.currentWidget;
+  if (current && current.content.model) {
+    console.log('Initial notebook loaded');
+    widget.updateNotebook(current.content.model.toJSON());
+  } else {
+    widget.clearNotebook();
+  }
+
+  // Listen for notebook changes
+  notebookTracker.currentChanged.connect(() => {
+    const current = notebookTracker.currentWidget;
+
+    if (current && current.content.model) {
+      console.log('Switched to different notebook');
+      widget.updateNotebook(current.content.model.toJSON());
+
+      // Listen for changes in the current notebook's content
+      current.content.model.contentChanged.connect(() => {
+        console.log(
+          'Notebook content changed - cells modified, added, or deleted'
+        );
+        widget.updateNotebook(current.content.model.toJSON());
+      });
+    } else {
+      console.log('No notebook open, clearing widget');
+      widget.clearNotebook();
+    }
+  });
+
+  // Listen for active cell changes
+  notebookTracker.activeCellChanged.connect(() => {
+    const current = notebookTracker.currentWidget;
+    if (current && current.content.model) {
+      console.log('Active cell changed - cursor moved to different cell');
+      widget.updateNotebook(current.content.model.toJSON());
+    }
   });
 
   const openGraphCommand = 'graph-widget:open';
