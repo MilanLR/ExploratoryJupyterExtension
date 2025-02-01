@@ -3,9 +3,7 @@ import {
   JupyterFrontEndPlugin,
   ILayoutRestorer
 } from '@jupyterlab/application';
-
 import { ICommandPalette, WidgetTracker } from '@jupyterlab/apputils';
-
 import { INotebookTracker } from '@jupyterlab/notebook';
 import { GraphWidget } from './graphs/graphWidget';
 
@@ -47,29 +45,29 @@ const activateGraph = function (
   restorer: ILayoutRestorer
 ) {
   let widget: GraphWidget;
+  widget = new GraphWidget();
+
+  // Add the widget to the left area with an icon
+  app.shell.add(widget, 'left', {
+    rank: 900
+  });
 
   const openGraphCommand = 'graph-widget:open';
   app.commands.addCommand(openGraphCommand, {
-    label: 'Open Graph Widget',
+    label: 'Show Graph Widget',
     execute: () => {
-      widget = new GraphWidget();
-      app.shell.add(widget, 'main');
-      widgetTracker.add(widget);
+      widget.show();
     }
   });
 
   // Add the command to the palette.
   palette.addItem({ command: openGraphCommand, category: 'Tutorial' });
 
-  app.contextMenu.addItem({
-    command: 'graph-widget:open',
-    selector: '.jp-Notebook',
-    rank: 100
-  });
-
   const widgetTracker = new WidgetTracker<GraphWidget>({
     namespace: 'graph-widget'
   });
+
+  widgetTracker.add(widget);
 
   restorer.restore(widgetTracker, {
     command: 'graph-widget:open',
