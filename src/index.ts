@@ -7,6 +7,7 @@ import { ICommandPalette, WidgetTracker } from '@jupyterlab/apputils';
 import { INotebookTracker } from '@jupyterlab/notebook';
 import { GraphWidget, NotebookData } from './graphs/graphWidget';
 import '../style/base.css';
+import { NotebookListener } from './services/notebookListener';
 
 /**
  * Initialization data for the ExploratoryJupyterExtension extension.
@@ -24,10 +25,10 @@ const plugin: JupyterFrontEndPlugin<void> = {
     tracker: INotebookTracker,
     restorer: ILayoutRestorer
   ) => {
+    // Initialize graph widget
     activateGraph(app, palette, restorer, tracker);
-    console.log(
-      'JupyterLab extension ExploratoryJupyterExtension is activated!'
-    );
+
+    console.log('Extension activated!');
   }
 };
 

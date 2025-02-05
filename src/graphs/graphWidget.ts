@@ -1,5 +1,6 @@
 import { Widget } from '@lumino/widgets';
 import { DataSet, Network, Edge, Node, Options } from 'vis-network/standalone';
+import { NotebookStore } from '../stores/notebookStore';
 
 interface NotebookCell {
   id: string;
@@ -94,6 +95,18 @@ export class GraphWidget extends Widget {
     };
 
     this.network = new Network(container, data, options);
+
+    // Subscribe to notebook changes
+    NotebookStore.subscribe(
+      s => s.activeNotebookContent,
+      notebookContent => {
+        if (notebookContent) {
+          this.updateNotebook(notebookContent);
+        } else {
+          this.clearNotebook();
+        }
+      }
+    );
   }
 
   updateNotebook(notebookData: any): void {
@@ -114,6 +127,11 @@ export class GraphWidget extends Widget {
     // Create a node for each cell
     const cells = notebook.cells;
     console.log('Cells:', cells);
+
+    const xOffset = 350; // Offset from left
+    const yOffset = 350; // Offset from top
+    const ySpacing = 100; // Vertical space between nodes
+
     for (let i = 0; i < cells.length; i++) {
       const cell = cells[i];
       console.log('Cell:', cell);
@@ -128,7 +146,12 @@ export class GraphWidget extends Widget {
       const newNode = {
         id: i + 1,
         label: `${cellType}\n${truncatedContent || `Cell ${i + 1}`}`,
-        level: i,
+        x: xOffset,
+        y: yOffset + i * ySpacing, // Position nodes vertically with equal spacing
+        // fixed: {
+        //   x: true,
+        //   y: true
+        // },
         color: cellType === 'code' ? '#8dd3c7' : '#fb8072'
       };
 
