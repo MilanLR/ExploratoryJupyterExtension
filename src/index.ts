@@ -5,9 +5,21 @@ import {
 } from '@jupyterlab/application';
 import { ICommandPalette, WidgetTracker } from '@jupyterlab/apputils';
 import { INotebookTracker } from '@jupyterlab/notebook';
-import { GraphWidget, NotebookData } from './graphs/graphWidget';
+import { GraphWidget } from './graphs/graphWidget';
 import '../style/base.css';
-import { NotebookListener } from './services/notebookListener';
+import {
+  addIcon,
+  caretLeftIcon,
+  caretRightIcon,
+  deleteIcon
+} from '@jupyterlab/ui-components';
+
+const CommandIds = {
+  add: 'alternative-command-add',
+  left: 'alternative-command-left',
+  right: 'alternative-command-right',
+  delete: 'alternative-command-delete'
+};
 
 /**
  * Initialization data for the ExploratoryJupyterExtension extension.
@@ -27,6 +39,42 @@ const plugin: JupyterFrontEndPlugin<void> = {
   ) => {
     // Initialize graph widget
     activateGraph(app, palette, restorer, tracker);
+
+    app.commands.addCommand(CommandIds.add, {
+      icon: addIcon,
+      caption: 'Add alternative cell',
+      execute: () => {
+        console.log('Add button clicked');
+      },
+      isVisible: () => tracker.activeCell?.model.type === 'code'
+    });
+
+    app.commands.addCommand(CommandIds.left, {
+      icon: caretLeftIcon,
+      caption: 'Move left',
+      execute: () => {
+        console.log('Left button clicked');
+      },
+      isVisible: () => tracker.activeCell?.model.type === 'code'
+    });
+
+    app.commands.addCommand(CommandIds.right, {
+      icon: caretRightIcon,
+      caption: 'Move right',
+      execute: () => {
+        console.log('Right button clicked');
+      },
+      isVisible: () => tracker.activeCell?.model.type === 'code'
+    });
+
+    app.commands.addCommand(CommandIds.delete, {
+      icon: deleteIcon,
+      caption: 'Delete node',
+      execute: () => {
+        console.log('Delete button clicked');
+      },
+      isVisible: () => tracker.activeCell?.model.type === 'code'
+    });
 
     console.log('Extension activated!');
   }

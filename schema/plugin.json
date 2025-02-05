@@ -1,0 +1,36 @@
+{
+  "jupyter.lab.shortcuts": [],
+  "title": "ExploratoryJupyterExtension",
+  "description": "ExploratoryJupyterExtension settings.",
+  "type": "object",
+  "properties": {},
+  "additionalProperties": false,
+  "jupyter.lab.toolbars": {
+    "Cell": [
+      {
+        "name": "add",
+        "icon": "plus",
+        "command": "alternative-command-add",
+        "rank": 10
+      },
+      {
+        "name": "left",
+        "icon": "arrow-left",
+        "command": "alternative-command-left",
+        "rank": 20
+      },
+      {
+        "name": "right",
+        "icon": "arrow-right",
+        "command": "alternative-command-right",
+        "rank": 30
+      },
+      {
+        "name": "delete",
+        "icon": "trash",
+        "command": "alternative-command-delete",
+        "rank": 40
+      }
+    ]
+  }
+}

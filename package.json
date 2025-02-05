@@ -57,8 +57,9 @@
         "watch:labextension": "jupyter labextension watch ."
     },
     "dependencies": {
-        "@jupyterlab/application": "^4.3.4",
-        "@jupyterlab/apputils": "^4.4.4",
+        "@jupyterlab/application": "^4.3.5",
+        "@jupyterlab/apputils": "^4.4.5",
+        "@jupyterlab/ui-components": "^4.3.5",
         "@lumino/widgets": "^2.5.0",
         "@types/hammerjs": "^2.0.46",
         "hammerjs": "^2.0.8",
@@ -105,7 +106,8 @@
     },
     "jupyterlab": {
         "extension": true,
-        "outputDir": "ExploratoryJupyterExtension/labextension"
+        "outputDir": "ExploratoryJupyterExtension/labextension",
+        "schemaDir": "schema"
     },
     "eslintIgnore": [
         "node_modules",
