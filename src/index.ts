@@ -13,6 +13,7 @@ import {
   caretRightIcon,
   deleteIcon
 } from '@jupyterlab/ui-components';
+import { AlternativeManager } from './alternativeManager';
 
 const CommandIds = {
   add: 'alternative-command-add',
@@ -37,43 +38,121 @@ const plugin: JupyterFrontEndPlugin<void> = {
     tracker: INotebookTracker,
     restorer: ILayoutRestorer
   ) => {
+    // Initialize the alternative manager
+    const alternativeManager = new AlternativeManager();
+
     // Initialize graph widget
     activateGraph(app, palette, restorer, tracker);
 
     app.commands.addCommand(CommandIds.add, {
       icon: addIcon,
-      caption: 'Add alternative cell',
+      iconClass: 'teal-icon',
+      caption: 'Add alternative version',
       execute: () => {
-        console.log('Add button clicked');
+        const cell = tracker.activeCell;
+        if (!cell) return;
+
+        const cellId = cell.model.id;
+        const source = cell.model.sharedModel.getSource();
+
+        alternativeManager.addAlternative(cellId, source);
+        console.log('Added alternative version');
+
+        // Refresh button states
+        Object.values(CommandIds).forEach(id => {
+          app.commands.notifyCommandChanged(id);
+        });
       },
       isVisible: () => tracker.activeCell?.model.type === 'code'
     });
 
     app.commands.addCommand(CommandIds.left, {
       icon: caretLeftIcon,
-      caption: 'Move left',
+      iconClass: 'teal-icon',
+      caption: 'Move alternative version left',
       execute: () => {
-        console.log('Left button clicked');
+        const cell = tracker.activeCell;
+        if (!cell) return;
+
+        const newSource = alternativeManager.moveAlternative(
+          cell.model.id,
+          'left'
+        );
+        if (newSource !== null) {
+          cell.model.sharedModel.setSource(newSource);
+
+          // Refresh button states
+          Object.values(CommandIds).forEach(id => {
+            app.commands.notifyCommandChanged(id);
+          });
+        }
       },
-      isVisible: () => tracker.activeCell?.model.type === 'code'
+      isVisible: () => tracker.activeCell?.model.type === 'code',
+      isEnabled: () => {
+        const cell = tracker.activeCell;
+        if (!cell) return false;
+        const versions = alternativeManager.getAlternatives(cell.model.id);
+        const currentIndex = alternativeManager.getActiveIndex(cell.model.id);
+        return versions.length > 1 && currentIndex > 0;
+      }
     });
 
     app.commands.addCommand(CommandIds.right, {
       icon: caretRightIcon,
-      caption: 'Move right',
+      iconClass: 'teal-icon',
+      caption: 'Move alternative version right',
       execute: () => {
-        console.log('Right button clicked');
+        const cell = tracker.activeCell;
+        if (!cell) return;
+
+        const newSource = alternativeManager.moveAlternative(
+          cell.model.id,
+          'right'
+        );
+        if (newSource !== null) {
+          cell.model.sharedModel.setSource(newSource);
+
+          // Refresh button states
+          Object.values(CommandIds).forEach(id => {
+            app.commands.notifyCommandChanged(id);
+          });
+        }
       },
-      isVisible: () => tracker.activeCell?.model.type === 'code'
+      isVisible: () => tracker.activeCell?.model.type === 'code',
+      isEnabled: () => {
+        const cell = tracker.activeCell;
+        if (!cell) return false;
+        const versions = alternativeManager.getAlternatives(cell.model.id);
+        const currentIndex = alternativeManager.getActiveIndex(cell.model.id);
+        return versions.length > 1 && currentIndex < versions.length - 1;
+      }
     });
 
     app.commands.addCommand(CommandIds.delete, {
       icon: deleteIcon,
-      caption: 'Delete node',
+      iconClass: 'teal-icon',
+      caption: 'Delete alternative version',
       execute: () => {
-        console.log('Delete button clicked');
+        const cell = tracker.activeCell;
+        if (!cell) return;
+
+        const newSource = alternativeManager.deleteAlternative(cell.model.id);
+        if (newSource !== null) {
+          cell.model.sharedModel.setSource(newSource);
+
+          // Refresh button states
+          Object.values(CommandIds).forEach(id => {
+            app.commands.notifyCommandChanged(id);
+          });
+        }
       },
-      isVisible: () => tracker.activeCell?.model.type === 'code'
+      isVisible: () => tracker.activeCell?.model.type === 'code',
+      isEnabled: () => {
+        const cell = tracker.activeCell;
+        if (!cell) return false;
+        const versions = alternativeManager.getAlternatives(cell.model.id);
+        return versions.length > 1;
+      }
     });
 
     console.log('Extension activated!');

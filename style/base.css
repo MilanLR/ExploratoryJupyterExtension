@@ -49,9 +49,10 @@
     height: 100%;
 }
 
-.jp-Toolbar-item button[data-command="alternative-command-add"],
-.jp-Toolbar-item button[data-command="alternative-command-left"],
-.jp-Toolbar-item button[data-command="alternative-command-right"],
-.jp-Toolbar-item button[data-command="alternative-command-delete"] {
+.teal-icon svg {
     color: teal;
+}
+
+.teal-icon {
+    margin-left: 20px;  /* Add space before our custom buttons */
 }
