@@ -1,6 +1,9 @@
 import { Widget } from '@lumino/widgets';
 import { DataSet, Network, Edge, Node, Options } from 'vis-network/standalone';
 import { NotebookStore } from '../stores/notebookStore';
+import { INotebookModel } from '@jupyterlab/notebook';
+import { AlternativeManager } from '../alternatives/alternativeManager';
+import { ICellModel } from '@jupyterlab/cells';
 
 interface NotebookCell {
   id: string;
@@ -8,6 +11,7 @@ interface NotebookCell {
   source: string;
   metadata: {
     trusted: boolean;
+    alternatives?: any[];
   };
   outputs: any[];
   execution_count: number | null;
@@ -47,9 +51,12 @@ export class GraphWidget extends Widget {
   private nodes: any;
   private edges: any;
   private _content: HTMLElement;
+  private alternativeManager: AlternativeManager;
+  private currentNotebook: INotebookModel | null = null;
 
-  constructor() {
+  constructor(alternativeManager: AlternativeManager) {
     super();
+    this.alternativeManager = alternativeManager;
     this.addClass('jp-GraphWidget');
     this.id = 'graph-widget';
     this.title.label = 'Graph View';
@@ -96,6 +103,28 @@ export class GraphWidget extends Widget {
 
     this.network = new Network(container, data, options);
 
+    // Add double click event handler
+    this.network.on('doubleClick', properties => {
+      const nodeId = properties.nodes[0];
+      if (!nodeId || typeof nodeId !== 'string' || !nodeId.includes('-alt-')) {
+        return; // Only handle alternative nodes
+      }
+
+      // Parse the cell index and alternative index from the node ID
+      // Format is "{cellIndex}-alt-{altIndex}"
+      const [cellIndexStr, , altIndexStr] = nodeId.split('-');
+      const cellIndex = parseInt(cellIndexStr) - 1; // Subtract 1 since node IDs are 1-based
+      const altIndex = parseInt(altIndexStr) - 1; // Subtract 1 since alt IDs are 1-based
+
+      if (!this.currentNotebook) return;
+
+      const cell = this.currentNotebook.cells.get(cellIndex);
+      if (!cell) return;
+
+      // Switch to the selected alternative
+      this.alternativeManager.switchToAlternative(cell, altIndex);
+    });
+
     // Subscribe to notebook changes
     NotebookStore.subscribe(
       s => s.activeNotebookContent,
@@ -109,16 +138,14 @@ export class GraphWidget extends Widget {
     );
   }
 
-  updateNotebook(notebookData: any): void {
-    console.log('Widget received notebook data:', notebookData);
+  updateNotebook(notebook: INotebookModel | null): void {
+    this.currentNotebook = notebook; // Store reference to current notebook
+    console.log('Widget received notebook data:', notebook);
 
-    if (!notebookData) {
+    if (!notebook) {
       this.clearNotebook();
       return;
     }
-
-    // Parse the notebook data into our typed interface
-    const notebook = notebookData as NotebookData;
 
     // Clear existing nodes
     this.nodes.clear();
@@ -126,43 +153,65 @@ export class GraphWidget extends Widget {
 
     // Create a node for each cell
     const cells = notebook.cells;
-    console.log('Cells:', cells);
 
-    const xOffset = 350; // Offset from left
+    const xOffset = 350; // Base offset from left
     const yOffset = 350; // Offset from top
     const ySpacing = 100; // Vertical space between nodes
+    const xSpacing = 200; // Horizontal space between alternatives
 
     for (let i = 0; i < cells.length; i++) {
-      const cell = cells[i];
+      const cell = cells.get(i);
       console.log('Cell:', cell);
 
-      const cellContent = cell.source;
-      console.log('Cell content:', cellContent);
+      // Check if cell has alternatives
+      const alternatives = this.alternativeManager.getAlternatives(cell);
+      const isActive = true; // TODO: Get this from cell metadata
 
-      const cellType = cell.cell_type;
+      // Create node for main cell
+      const cellContent = cell.sharedModel.getSource();
+      const cellType = cell.type;
       const truncatedContent =
         cellContent.slice(0, 20) + (cellContent.length > 20 ? '...' : '');
 
-      const newNode = {
+      const mainNode = {
         id: i + 1,
         label: `${cellType}\n${truncatedContent || `Cell ${i + 1}`}`,
         x: xOffset,
-        y: yOffset + i * ySpacing, // Position nodes vertically with equal spacing
-        // fixed: {
-        //   x: true,
-        //   y: true
-        // },
-        color: cellType === 'code' ? '#8dd3c7' : '#fb8072'
+        y: yOffset + i * ySpacing,
+        color: cellType === 'code' ? '#8dd3c7' : '#fb8072',
+        borderWidth: isActive ? 3 : 1
       };
 
-      console.log('Adding node:', newNode);
-      this.nodes.add(newNode);
+      console.log('Adding node:', mainNode);
+      this.nodes.add(mainNode);
+      console.log('Adding alternatives:', alternatives);
+      // Add alternatives as nodes to the right
+      alternatives.forEach((alt: any, altIndex: number) => {
+        const altNode = {
+          id: `${i + 1}-alt-${altIndex + 1}`,
+          label: `Alternative ${altIndex + 1}\n${alt.source.slice(0, 20)}...`,
+          x: xOffset + (altIndex + 1) * xSpacing,
+          y: yOffset + i * ySpacing,
+          color: cellType === 'code' ? '#8dd3c7' : '#fb8072',
+          borderWidth: alt.isActive ? 3 : 1
+        };
+        this.nodes.add(altNode);
+
+        // Add edge between main cell and alternative
+        this.edges.add({
+          from: i + 1,
+          to: `${i + 1}-alt-${altIndex + 1}`,
+          dashes: true,
+          color: { color: '#848484' }
+        });
+      });
 
       // Add edge to previous cell
       if (i > 0) {
         const newEdge = {
           from: i,
-          to: i + 1
+          to: i + 1,
+          width: isActive ? 3 : 1
         };
         console.log('Adding edge:', newEdge);
         this.edges.add(newEdge);

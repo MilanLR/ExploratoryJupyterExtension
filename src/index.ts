@@ -13,7 +13,7 @@ import {
   caretRightIcon,
   deleteIcon
 } from '@jupyterlab/ui-components';
-import { AlternativeManager } from './alternativeManager';
+import { AlternativeManager } from './alternatives/alternativeManager';
 
 const CommandIds = {
   add: 'alternative-command-add',
@@ -39,10 +39,15 @@ const plugin: JupyterFrontEndPlugin<void> = {
     restorer: ILayoutRestorer
   ) => {
     // Initialize the alternative manager
-    const alternativeManager = new AlternativeManager();
+    const alternativeManager = new AlternativeManager(() => {
+      // Refresh button states
+      Object.values(CommandIds).forEach(id => {
+        app.commands.notifyCommandChanged(id);
+      });
+    });
 
     // Initialize graph widget
-    activateGraph(app, palette, restorer, tracker);
+    activateGraph(app, palette, restorer, tracker, alternativeManager);
 
     app.commands.addCommand(CommandIds.add, {
       icon: addIcon,
@@ -52,10 +57,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
         const cell = tracker.activeCell;
         if (!cell) return;
 
-        const cellId = cell.model.id;
         const source = cell.model.sharedModel.getSource();
 
-        alternativeManager.addAlternative(cellId, source, cell.model);
+        alternativeManager.addAlternative(source, cell.model);
 
         // Refresh button states
         Object.values(CommandIds).forEach(id => {
@@ -71,14 +75,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
       caption: () => {
         const cell = tracker.activeCell;
         if (!cell) return 'Move alternative version left';
-        const versions = alternativeManager.getAlternatives(
-          cell.model.id,
-          cell.model
-        );
-        const currentIndex = alternativeManager.getActiveIndex(
-          cell.model.id,
-          cell.model
-        );
+        const versions = alternativeManager.getAlternatives(cell.model);
+        const currentIndex = alternativeManager.getActiveIndex(cell.model);
         return versions.length > 1
           ? `Move left (Version ${currentIndex + 1}/${versions.length})`
           : 'Move alternative version left';
@@ -87,32 +85,19 @@ const plugin: JupyterFrontEndPlugin<void> = {
         const cell = tracker.activeCell;
         if (!cell) return;
 
-        const newSource = alternativeManager.moveAlternative(
-          cell.model.id,
-          'left',
-          cell.model
-        );
-        if (newSource !== null) {
-          cell.model.sharedModel.setSource(newSource);
+        alternativeManager.moveAlternative('left', cell.model);
 
-          // Refresh button states
-          Object.values(CommandIds).forEach(id => {
-            app.commands.notifyCommandChanged(id);
-          });
-        }
+        // Refresh button states
+        Object.values(CommandIds).forEach(id => {
+          app.commands.notifyCommandChanged(id);
+        });
       },
       isVisible: () => tracker.activeCell?.model.type === 'code',
       isEnabled: () => {
         const cell = tracker.activeCell;
         if (!cell) return false;
-        const versions = alternativeManager.getAlternatives(
-          cell.model.id,
-          cell.model
-        );
-        const currentIndex = alternativeManager.getActiveIndex(
-          cell.model.id,
-          cell.model
-        );
+        const versions = alternativeManager.getAlternatives(cell.model);
+        const currentIndex = alternativeManager.getActiveIndex(cell.model);
         return versions.length > 1 && currentIndex > 0;
       }
     });
@@ -123,14 +108,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
       caption: () => {
         const cell = tracker.activeCell;
         if (!cell) return 'Move alternative version right';
-        const versions = alternativeManager.getAlternatives(
-          cell.model.id,
-          cell.model
-        );
-        const currentIndex = alternativeManager.getActiveIndex(
-          cell.model.id,
-          cell.model
-        );
+        const versions = alternativeManager.getAlternatives(cell.model);
+        const currentIndex = alternativeManager.getActiveIndex(cell.model);
         return versions.length > 1
           ? `Move right (Version ${currentIndex + 1}/${versions.length})`
           : 'Move alternative version right';
@@ -139,32 +118,14 @@ const plugin: JupyterFrontEndPlugin<void> = {
         const cell = tracker.activeCell;
         if (!cell) return;
 
-        const newSource = alternativeManager.moveAlternative(
-          cell.model.id,
-          'right',
-          cell.model
-        );
-        if (newSource !== null) {
-          cell.model.sharedModel.setSource(newSource);
-
-          // Refresh button states
-          Object.values(CommandIds).forEach(id => {
-            app.commands.notifyCommandChanged(id);
-          });
-        }
+        alternativeManager.moveAlternative('right', cell.model);
       },
       isVisible: () => tracker.activeCell?.model.type === 'code',
       isEnabled: () => {
         const cell = tracker.activeCell;
         if (!cell) return false;
-        const versions = alternativeManager.getAlternatives(
-          cell.model.id,
-          cell.model
-        );
-        const currentIndex = alternativeManager.getActiveIndex(
-          cell.model.id,
-          cell.model
-        );
+        const versions = alternativeManager.getAlternatives(cell.model);
+        const currentIndex = alternativeManager.getActiveIndex(cell.model);
         return versions.length > 1 && currentIndex < versions.length - 1;
       }
     });
@@ -175,14 +136,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
       caption: () => {
         const cell = tracker.activeCell;
         if (!cell) return 'Delete alternative version';
-        const versions = alternativeManager.getAlternatives(
-          cell.model.id,
-          cell.model
-        );
-        const currentIndex = alternativeManager.getActiveIndex(
-          cell.model.id,
-          cell.model
-        );
+        const versions = alternativeManager.getAlternatives(cell.model);
+        const currentIndex = alternativeManager.getActiveIndex(cell.model);
         return versions.length > 1
           ? `Delete version ${currentIndex + 1}/${versions.length}`
           : 'Delete alternative version';
@@ -191,27 +146,13 @@ const plugin: JupyterFrontEndPlugin<void> = {
         const cell = tracker.activeCell;
         if (!cell) return;
 
-        const newSource = alternativeManager.deleteAlternative(
-          cell.model.id,
-          cell.model
-        );
-        if (newSource !== null) {
-          cell.model.sharedModel.setSource(newSource);
-
-          // Refresh button states
-          Object.values(CommandIds).forEach(id => {
-            app.commands.notifyCommandChanged(id);
-          });
-        }
+        alternativeManager.deleteAlternative(cell.model);
       },
       isVisible: () => tracker.activeCell?.model.type === 'code',
       isEnabled: () => {
         const cell = tracker.activeCell;
         if (!cell) return false;
-        const versions = alternativeManager.getAlternatives(
-          cell.model.id,
-          cell.model
-        );
+        const versions = alternativeManager.getAlternatives(cell.model);
         return versions.length > 1;
       }
     });
@@ -221,7 +162,6 @@ const plugin: JupyterFrontEndPlugin<void> = {
       if (cell) {
         cell.model.contentChanged.connect(() => {
           alternativeManager.updateCurrentVersion(
-            cell.model.id,
             cell.model,
             cell.model.sharedModel.getSource()
           );
@@ -237,7 +177,8 @@ const activateGraph = function (
   app: JupyterFrontEnd,
   palette: ICommandPalette,
   restorer: ILayoutRestorer,
-  notebookTracker: INotebookTracker
+  notebookTracker: INotebookTracker,
+  alternativeManager: AlternativeManager
 ) {
   let widget: GraphWidget;
   const command = 'graph-widget:open';
@@ -249,7 +190,7 @@ const activateGraph = function (
       if (!widget || widget.isDisposed) {
         // Create a new widget if one does not exist
         // or if the previous one was disposed
-        widget = new GraphWidget();
+        widget = new GraphWidget(alternativeManager);
 
         // Add the widget to the left area
         app.shell.add(widget, 'left', {
@@ -263,7 +204,7 @@ const activateGraph = function (
         const current = notebookTracker.currentWidget;
         if (current && current.content.model) {
           console.log('Initial notebook loaded');
-          widget.updateNotebook(current.content.model.toJSON());
+          widget.updateNotebook(current.content.model);
         } else {
           widget.clearNotebook();
         }
@@ -306,14 +247,14 @@ function setupNotebookListeners(
 
     if (current && current.content.model) {
       console.log('Switched to different notebook');
-      widget.updateNotebook(current.content.model.toJSON());
+      widget.updateNotebook(current.content.model);
 
       // Listen for changes in the current notebook's content
       current.content.model.contentChanged.connect(() => {
         console.log(
           'Notebook content changed - cells modified, added, or deleted'
         );
-        widget.updateNotebook(current.content.model?.toJSON());
+        widget.updateNotebook(current.content.model);
       });
     } else {
       console.log('No notebook open, clearing widget');
@@ -326,7 +267,7 @@ function setupNotebookListeners(
     const current = notebookTracker.currentWidget;
     if (current && current.content.model) {
       console.log('Active cell changed - cursor moved to different cell');
-      widget.updateNotebook(current.content.model.toJSON());
+      widget.updateNotebook(current.content.model);
     }
   });
 }
