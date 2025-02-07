@@ -55,8 +55,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
         const cellId = cell.model.id;
         const source = cell.model.sharedModel.getSource();
 
-        alternativeManager.addAlternative(cellId, source);
-        console.log('Added alternative version');
+        alternativeManager.addAlternative(cellId, source, cell.model);
 
         // Refresh button states
         Object.values(CommandIds).forEach(id => {
@@ -69,14 +68,29 @@ const plugin: JupyterFrontEndPlugin<void> = {
     app.commands.addCommand(CommandIds.left, {
       icon: caretLeftIcon,
       iconClass: 'teal-icon',
-      caption: 'Move alternative version left',
+      caption: () => {
+        const cell = tracker.activeCell;
+        if (!cell) return 'Move alternative version left';
+        const versions = alternativeManager.getAlternatives(
+          cell.model.id,
+          cell.model
+        );
+        const currentIndex = alternativeManager.getActiveIndex(
+          cell.model.id,
+          cell.model
+        );
+        return versions.length > 1
+          ? `Move left (Version ${currentIndex + 1}/${versions.length})`
+          : 'Move alternative version left';
+      },
       execute: () => {
         const cell = tracker.activeCell;
         if (!cell) return;
 
         const newSource = alternativeManager.moveAlternative(
           cell.model.id,
-          'left'
+          'left',
+          cell.model
         );
         if (newSource !== null) {
           cell.model.sharedModel.setSource(newSource);
@@ -91,8 +105,14 @@ const plugin: JupyterFrontEndPlugin<void> = {
       isEnabled: () => {
         const cell = tracker.activeCell;
         if (!cell) return false;
-        const versions = alternativeManager.getAlternatives(cell.model.id);
-        const currentIndex = alternativeManager.getActiveIndex(cell.model.id);
+        const versions = alternativeManager.getAlternatives(
+          cell.model.id,
+          cell.model
+        );
+        const currentIndex = alternativeManager.getActiveIndex(
+          cell.model.id,
+          cell.model
+        );
         return versions.length > 1 && currentIndex > 0;
       }
     });
@@ -100,14 +120,29 @@ const plugin: JupyterFrontEndPlugin<void> = {
     app.commands.addCommand(CommandIds.right, {
       icon: caretRightIcon,
       iconClass: 'teal-icon',
-      caption: 'Move alternative version right',
+      caption: () => {
+        const cell = tracker.activeCell;
+        if (!cell) return 'Move alternative version right';
+        const versions = alternativeManager.getAlternatives(
+          cell.model.id,
+          cell.model
+        );
+        const currentIndex = alternativeManager.getActiveIndex(
+          cell.model.id,
+          cell.model
+        );
+        return versions.length > 1
+          ? `Move right (Version ${currentIndex + 1}/${versions.length})`
+          : 'Move alternative version right';
+      },
       execute: () => {
         const cell = tracker.activeCell;
         if (!cell) return;
 
         const newSource = alternativeManager.moveAlternative(
           cell.model.id,
-          'right'
+          'right',
+          cell.model
         );
         if (newSource !== null) {
           cell.model.sharedModel.setSource(newSource);
@@ -122,8 +157,14 @@ const plugin: JupyterFrontEndPlugin<void> = {
       isEnabled: () => {
         const cell = tracker.activeCell;
         if (!cell) return false;
-        const versions = alternativeManager.getAlternatives(cell.model.id);
-        const currentIndex = alternativeManager.getActiveIndex(cell.model.id);
+        const versions = alternativeManager.getAlternatives(
+          cell.model.id,
+          cell.model
+        );
+        const currentIndex = alternativeManager.getActiveIndex(
+          cell.model.id,
+          cell.model
+        );
         return versions.length > 1 && currentIndex < versions.length - 1;
       }
     });
@@ -131,12 +172,29 @@ const plugin: JupyterFrontEndPlugin<void> = {
     app.commands.addCommand(CommandIds.delete, {
       icon: deleteIcon,
       iconClass: 'teal-icon',
-      caption: 'Delete alternative version',
+      caption: () => {
+        const cell = tracker.activeCell;
+        if (!cell) return 'Delete alternative version';
+        const versions = alternativeManager.getAlternatives(
+          cell.model.id,
+          cell.model
+        );
+        const currentIndex = alternativeManager.getActiveIndex(
+          cell.model.id,
+          cell.model
+        );
+        return versions.length > 1
+          ? `Delete version ${currentIndex + 1}/${versions.length}`
+          : 'Delete alternative version';
+      },
       execute: () => {
         const cell = tracker.activeCell;
         if (!cell) return;
 
-        const newSource = alternativeManager.deleteAlternative(cell.model.id);
+        const newSource = alternativeManager.deleteAlternative(
+          cell.model.id,
+          cell.model
+        );
         if (newSource !== null) {
           cell.model.sharedModel.setSource(newSource);
 
@@ -150,8 +208,24 @@ const plugin: JupyterFrontEndPlugin<void> = {
       isEnabled: () => {
         const cell = tracker.activeCell;
         if (!cell) return false;
-        const versions = alternativeManager.getAlternatives(cell.model.id);
+        const versions = alternativeManager.getAlternatives(
+          cell.model.id,
+          cell.model
+        );
         return versions.length > 1;
+      }
+    });
+
+    // Set up cell change tracking
+    tracker.activeCellChanged.connect((_, cell) => {
+      if (cell) {
+        cell.model.contentChanged.connect(() => {
+          alternativeManager.updateCurrentVersion(
+            cell.model.id,
+            cell.model,
+            cell.model.sharedModel.getSource()
+          );
+        });
       }
     });
 
