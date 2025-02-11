@@ -29,27 +29,29 @@
       }
     ]
   },
-  "jupyter.lab.metadataforms": {
-    "id": "alternative-metadata-form",
-    "label": "Alternative Versions",
-    "metadataSchema": {
-      "type": "object",
-      "properties": {
-        "versions": {
-          "type": "array",
-          "items": {
-            "type": "string"
+  "jupyter.lab.metadataforms": [
+    {
+      "id": "alternative-metadata-form",
+      "label": "Alternative Versions",
+      "metadataSchema": {
+        "type": "object",
+        "properties": {
+          "versions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "Alternative Versions",
+            "description": "List of alternative code versions"
           },
-          "title": "Alternative Versions",
-          "description": "List of alternative code versions"
-        },
-        "activeVersion": {
-          "type": "integer",
-          "title": "Active Version",
-          "description": "Index of currently active version",
-          "minimum": 0
+          "activeVersion": {
+            "type": "integer",
+            "title": "Active Version",
+            "description": "Index of currently active version",
+            "minimum": 0
+          }
         }
       }
     }
-  }
+  ]
 }

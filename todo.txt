@@ -1,0 +1,3 @@
+buttons teal
+think about graph
+move graph init to schema

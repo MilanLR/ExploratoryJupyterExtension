@@ -11,15 +11,23 @@ import {
   addIcon,
   caretLeftIcon,
   caretRightIcon,
-  deleteIcon
+  deleteIcon,
+  LabIcon
 } from '@jupyterlab/ui-components';
 import { AlternativeManager } from './alternatives/alternativeManager';
+import graphIconStr from '../style/icons/graph.svg';
+
+const graphIcon = new LabIcon({
+  name: 'ui-components:graph',
+  svgstr: graphIconStr
+});
 
 const CommandIds = {
   add: 'alternative-command-add',
   left: 'alternative-command-left',
   right: 'alternative-command-right',
-  delete: 'alternative-command-delete'
+  delete: 'alternative-command-delete',
+  open: 'graph-widget:open'
 };
 
 /**
@@ -181,11 +189,11 @@ const activateGraph = function (
   alternativeManager: AlternativeManager
 ) {
   let widget: GraphWidget;
-  const command = 'graph-widget:open';
 
   // Add an application command
-  app.commands.addCommand(command, {
-    label: 'Show Graph Widget',
+  app.commands.addCommand(CommandIds.open, {
+    label: 'Open Graph Widget',
+    icon: graphIcon,
     execute: () => {
       if (!widget || widget.isDisposed) {
         // Create a new widget if one does not exist
@@ -224,16 +232,15 @@ const activateGraph = function (
   if (restorer) {
     // Register the widget with the layout restorer
     restorer.restore(widgetTracker, {
-      command,
+      command: CommandIds.open,
       name: () => 'graph-widget'
     });
   }
 
   // Add the command to the palette
-  palette.addItem({ command, category: 'Tutorial' });
+  palette.addItem({ command: CommandIds.open, category: 'Tutorial' });
 
-  // Execute the command once during initialization
-  app.commands.execute(command);
+  app.commands.execute(CommandIds.open);
 };
 
 // Helper function to set up notebook listeners
