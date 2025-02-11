@@ -56,6 +56,7 @@ export class AlternativeManager {
 
     // Add the new version
     cellData.versions.push({ source });
+    cellData.activeIndex = cellData.versions.length - 1;
     this.setCellMetadata(cell, cellData);
     this.refreshButtonsCallback();
   }

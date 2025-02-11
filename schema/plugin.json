@@ -15,23 +15,33 @@
       {
         "name": "left",
         "command": "alternative-command-left",
-        "rank": 20
+        "rank": 15
       },
       {
         "name": "right",
         "command": "alternative-command-right",
-        "rank": 30
+        "rank": 20
       },
       {
         "name": "delete",
         "command": "alternative-command-delete",
-        "rank": 40
+        "rank": 25
+      },
+      {
+        "name": "expand",
+        "command": "collapsed-command-expand",
+        "rank": 60
+      },
+      {
+        "name": "collapse",
+        "command": "collapsed-command-collapse",
+        "rank": 60
       }
     ]
   },
   "jupyter.lab.metadataforms": [
     {
-      "id": "alternative-metadata-form",
+      "id": "alternatives",
       "label": "Alternative Versions",
       "metadataSchema": {
         "type": "object",
@@ -49,6 +59,55 @@
             "title": "Active Version",
             "description": "Index of currently active version",
             "minimum": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "collapsed",
+      "label": "Collapsed",
+      "metadataSchema": {
+        "type": "object",
+        "properties": {
+          "nestingLevel": {
+            "type": "integer",
+            "minimum": 0,
+            "title": "Nesting Level",
+            "description": "The depth level of collapse, 0 means not collapsed"
+          },
+          "storedNodes": {
+            "type": "array",
+            "title": "Stored Nodes",
+            "description": "List of nodes that were collapsed",
+            "items": {
+              "type": "object",
+              "properties": {
+                "cellId": {
+                  "type": "string",
+                  "description": "ID of the collapsed cell"
+                },
+                "alternatives": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Alternative versions of the collapsed cell"
+                },
+                "activeVersion": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "Index of active version for this collapsed cell"
+                },
+                "nestedNodes": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/jupyter.lab.metadataforms/1/metadataSchema/properties/storedNodes/items"
+                  },
+                  "description": "Nodes that were collapsed within this node"
+                }
+              },
+              "required": ["cellId"]
+            }
           }
         }
       }

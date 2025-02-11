@@ -1,3 +1,13 @@
-buttons teal
-think about graph
-move graph init to schema
+- buttons teal
+- think about graph
+- move graph init to schema
+
+execution flow
+
+
+design / implementation
+
+extra stuff:
+documentation for exlporation process
+documentation in cells/associated to cells
+reactive components

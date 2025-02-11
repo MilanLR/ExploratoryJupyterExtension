@@ -16,6 +16,8 @@ import {
 } from '@jupyterlab/ui-components';
 import { AlternativeManager } from './alternatives/alternativeManager';
 import graphIconStr from '../style/icons/graph.svg';
+import { CollapsedManager } from './collapsed/collapsedManager';
+import { NotebookPanel } from '@jupyterlab/notebook';
 
 const graphIcon = new LabIcon({
   name: 'ui-components:graph',
@@ -27,7 +29,9 @@ const CommandIds = {
   left: 'alternative-command-left',
   right: 'alternative-command-right',
   delete: 'alternative-command-delete',
-  open: 'graph-widget:open'
+  open: 'graph-widget:open',
+  expand: 'collapsed-command-expand',
+  collapse: 'collapsed-command-collapse'
 };
 
 /**
@@ -68,11 +72,6 @@ const plugin: JupyterFrontEndPlugin<void> = {
         const source = cell.model.sharedModel.getSource();
 
         alternativeManager.addAlternative(source, cell.model);
-
-        // Refresh button states
-        Object.values(CommandIds).forEach(id => {
-          app.commands.notifyCommandChanged(id);
-        });
       },
       isVisible: () => tracker.activeCell?.model.type === 'code'
     });
@@ -94,11 +93,6 @@ const plugin: JupyterFrontEndPlugin<void> = {
         if (!cell) return;
 
         alternativeManager.moveAlternative('left', cell.model);
-
-        // Refresh button states
-        Object.values(CommandIds).forEach(id => {
-          app.commands.notifyCommandChanged(id);
-        });
       },
       isVisible: () => tracker.activeCell?.model.type === 'code',
       isEnabled: () => {
@@ -165,6 +159,58 @@ const plugin: JupyterFrontEndPlugin<void> = {
       }
     });
 
+    app.commands.addCommand(CommandIds.expand, {
+      execute: () => {
+        const notebook = app.shell.currentWidget;
+        if (notebook instanceof NotebookPanel) {
+          const activeCell = notebook.content.activeCell;
+          if (activeCell) {
+            const manager = new CollapsedManager(notebook);
+            manager.expand(activeCell.model);
+          }
+        }
+      },
+      isVisible: () => {
+        const notebook = app.shell.currentWidget;
+        if (notebook instanceof NotebookPanel) {
+          const activeCell = notebook.content.activeCell;
+          if (activeCell) {
+            const manager = new CollapsedManager(notebook);
+            return manager.isCollapsed(activeCell.model);
+          }
+        }
+        return false;
+      },
+      label: 'Expand Collapsed Cells'
+    });
+
+    app.commands.addCommand(CommandIds.collapse, {
+      execute: () => {
+        const notebook = app.shell.currentWidget;
+        if (notebook instanceof NotebookPanel) {
+          const selectedCells = notebook.content.widgets.filter(cell =>
+            notebook.content.isSelectedOrActive(cell)
+          );
+          if (selectedCells.length > 1) {
+            const manager = new CollapsedManager(notebook);
+            manager.collapse(selectedCells.map(cell => cell.model));
+          }
+        }
+      },
+      isVisible: () => {
+        const notebook = app.shell.currentWidget;
+        if (notebook instanceof NotebookPanel) {
+          const selectedCells = notebook.content.widgets.filter(cell =>
+            notebook.content.isSelectedOrActive(cell)
+          );
+          console.log('Selected cells:', selectedCells);
+          return selectedCells.length > 1;
+        }
+        return false;
+      },
+      label: 'Collapse Selected Cells'
+    });
+
     // Set up cell change tracking
     tracker.activeCellChanged.connect((_, cell) => {
       if (cell) {
@@ -175,6 +221,11 @@ const plugin: JupyterFrontEndPlugin<void> = {
           );
         });
       }
+    });
+
+    tracker.selectionChanged.connect((_, cells) => {
+      app.commands.notifyCommandChanged(CommandIds.collapse);
+      app.commands.notifyCommandChanged(CommandIds.expand);
     });
 
     console.log('Extension activated!');
