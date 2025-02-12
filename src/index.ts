@@ -165,7 +165,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
         if (notebook instanceof NotebookPanel) {
           const activeCell = notebook.content.activeCell;
           if (activeCell) {
-            const manager = new CollapsedManager(notebook);
+            const manager = new CollapsedManager(notebook, app.commands);
             manager.expand(activeCell.model);
           }
         }
@@ -175,7 +175,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
         if (notebook instanceof NotebookPanel) {
           const activeCell = notebook.content.activeCell;
           if (activeCell) {
-            const manager = new CollapsedManager(notebook);
+            const manager = new CollapsedManager(notebook, app.commands);
             return manager.isCollapsed(activeCell.model);
           }
         }
@@ -188,12 +188,16 @@ const plugin: JupyterFrontEndPlugin<void> = {
       execute: () => {
         const notebook = app.shell.currentWidget;
         if (notebook instanceof NotebookPanel) {
+          const activeCell = notebook.content.activeCell;
           const selectedCells = notebook.content.widgets.filter(cell =>
             notebook.content.isSelectedOrActive(cell)
           );
-          if (selectedCells.length > 1) {
-            const manager = new CollapsedManager(notebook);
-            manager.collapse(selectedCells.map(cell => cell.model));
+          if (selectedCells.length > 1 && activeCell) {
+            const manager = new CollapsedManager(notebook, app.commands);
+            manager.collapse(
+              selectedCells.map(cell => cell.model),
+              activeCell.model
+            );
           }
         }
       },

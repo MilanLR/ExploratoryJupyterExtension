@@ -69,12 +69,6 @@
       "metadataSchema": {
         "type": "object",
         "properties": {
-          "nestingLevel": {
-            "type": "integer",
-            "minimum": 0,
-            "title": "Nesting Level",
-            "description": "The depth level of collapse, 0 means not collapsed"
-          },
           "storedNodes": {
             "type": "array",
             "title": "Stored Nodes",
