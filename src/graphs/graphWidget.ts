@@ -2,8 +2,8 @@ import { Widget } from '@lumino/widgets';
 import { DataSet, Network, Edge, Node, Options } from 'vis-network/standalone';
 import { NotebookStore } from '../stores/notebookStore';
 import { INotebookModel } from '@jupyterlab/notebook';
-import { AlternativeManager } from '../alternatives/alternativeManager';
-import { CollapsedManager } from '../collapsed/collapsedManager';
+import { AlternativeManager } from '../managers/alternativeManager';
+import { CollapsedManager } from '../managers/collapsedManager';
 
 export class GraphWidget extends Widget {
   private network: Network;

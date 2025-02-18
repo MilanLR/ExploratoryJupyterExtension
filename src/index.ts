@@ -12,17 +12,11 @@ import {
   caretLeftIcon,
   caretRightIcon,
   deleteIcon,
-  LabIcon
-} from '@jupyterlab/ui-components';
-import { AlternativeManager } from './alternatives/alternativeManager';
-import graphIconStr from '../style/icons/graph.svg';
-import { CollapsedManager } from './collapsed/collapsedManager';
+  graphIcon
+} from './icons';
+import { AlternativeManager } from './managers/alternativeManager';
+import { CollapsedManager } from './managers/collapsedManager';
 import { NotebookPanel } from '@jupyterlab/notebook';
-
-const graphIcon = new LabIcon({
-  name: 'ui-components:graph',
-  svgstr: graphIconStr
-});
 
 const CommandIds = {
   add: 'alternative-command-add',
@@ -63,7 +57,6 @@ const plugin: JupyterFrontEndPlugin<void> = {
       app.commands
     );
 
-    // Initialize graph widget
     // Initialize graph widget
     activateGraph(
       app,
@@ -137,6 +130,18 @@ const plugin: JupyterFrontEndPlugin<void> = {
       },
       isVisible: () => tracker.activeCell?.model.type === 'code',
       isEnabled: () => {
+        const kernel =
+          tracker.currentWidget?.context.sessionContext.session?.kernel;
+        if (kernel) {
+          kernel.requestExecute({
+            code: 'print(csv if "csv" in locals() else "csv variable not found")'
+          }).onIOPub = msg => {
+            if (msg.header.msg_type === 'stream') {
+              console.log('csv variable:', (msg as any).content.text);
+            }
+          };
+        }
+
         const cell = tracker.activeCell;
         if (!cell) return false;
         const versions = alternativeManager.getAlternatives(cell.model);
@@ -216,7 +221,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
         }
         return false;
       },
-      label: 'Collapse Selected Cells'
+      label: 'Collapse Selected Cells',
+      className: 'teal-icon'
     });
 
     // Set up cell change tracking
@@ -328,7 +334,6 @@ function setupNotebookListeners(
       widget.clearNotebook();
     }
   });
-
   // Listen for active cell changes
   notebookTracker.activeCellChanged.connect(() => {
     const current = notebookTracker.currentWidget;
