@@ -41,7 +41,7 @@
   },
   "jupyter.lab.metadataforms": [
     {
-      "id": "alternatives",
+      "id": "alternatives-data",
       "label": "Alternative Versions",
       "metadataSchema": {
         "type": "object",
@@ -64,7 +64,7 @@
       }
     },
     {
-      "id": "collapsed",
+      "id": "collapsed-data",
       "label": "Collapsed",
       "metadataSchema": {
         "type": "object",

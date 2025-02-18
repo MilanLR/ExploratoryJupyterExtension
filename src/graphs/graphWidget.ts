@@ -3,48 +3,7 @@ import { DataSet, Network, Edge, Node, Options } from 'vis-network/standalone';
 import { NotebookStore } from '../stores/notebookStore';
 import { INotebookModel } from '@jupyterlab/notebook';
 import { AlternativeManager } from '../alternatives/alternativeManager';
-import { ICellModel } from '@jupyterlab/cells';
-
-interface NotebookCell {
-  id: string;
-  cell_type: 'code' | 'markdown'; // Specify the possible cell types
-  source: string;
-  metadata: {
-    trusted: boolean;
-    alternatives?: any[];
-  };
-  outputs: any[];
-  execution_count: number | null;
-}
-
-interface LanguageInfo {
-  codemirror_mode: {
-    name: string;
-    version: number;
-  };
-  file_extension: string;
-  mimetype: string;
-  name: string;
-  nbconvert_exporter: string;
-  pygments_lexer: string;
-  version: string;
-}
-
-interface KernelSpec {
-  display_name: string;
-  language: string;
-  name: string;
-}
-
-export interface NotebookData {
-  metadata: {
-    kernelspec: KernelSpec;
-    language_info: LanguageInfo;
-  };
-  nbformat_minor: number;
-  nbformat: number;
-  cells: NotebookCell[];
-}
+import { CollapsedManager } from '../collapsed/collapsedManager';
 
 export class GraphWidget extends Widget {
   private network: Network;
@@ -53,10 +12,15 @@ export class GraphWidget extends Widget {
   private _content: HTMLElement;
   private alternativeManager: AlternativeManager;
   private currentNotebook: INotebookModel | null = null;
+  private collapsedManager: CollapsedManager;
 
-  constructor(alternativeManager: AlternativeManager) {
+  constructor(
+    alternativeManager: AlternativeManager,
+    collapsedManager: CollapsedManager
+  ) {
     super();
     this.alternativeManager = alternativeManager;
+    this.collapsedManager = collapsedManager;
     this.addClass('jp-GraphWidget');
     this.id = 'graph-widget';
     this.title.label = 'Graph View';
@@ -139,7 +103,7 @@ export class GraphWidget extends Widget {
   }
 
   updateNotebook(notebook: INotebookModel | null): void {
-    this.currentNotebook = notebook; // Store reference to current notebook
+    this.currentNotebook = notebook;
     console.log('Widget received notebook data:', notebook);
 
     if (!notebook) {
@@ -161,65 +125,68 @@ export class GraphWidget extends Widget {
 
     for (let i = 0; i < cells.length; i++) {
       const cell = cells.get(i);
-      console.log('Cell:', cell);
+
+      // Skip non-code cells
+      if (cell.type !== 'code') {
+        continue;
+      }
 
       // Check if cell has alternatives
       const alternatives = this.alternativeManager.getAlternatives(cell);
-      const isActive = true; // TODO: Get this from cell metadata
+      const activeIndex = this.alternativeManager.getActiveIndex(cell);
+      const isCollapsed = this.collapsedManager.isCollapsed(cell);
 
-      // Create node for main cell
-      const cellContent = cell.sharedModel.getSource();
-      const cellType = cell.type;
-      const truncatedContent =
-        cellContent.slice(0, 20) + (cellContent.length > 20 ? '...' : '');
-
-      const mainNode = {
-        id: i + 1,
-        label: `${cellType}\n${truncatedContent || `Cell ${i + 1}`}`,
-        x: xOffset,
-        y: yOffset + i * ySpacing,
-        color: cellType === 'code' ? '#8dd3c7' : '#fb8072',
-        borderWidth: isActive ? 3 : 1
-      };
-
-      console.log('Adding node:', mainNode);
-      this.nodes.add(mainNode);
-      console.log('Adding alternatives:', alternatives);
-      // Add alternatives as nodes to the right
+      // Create nodes for each alternative
       alternatives.forEach((alt: any, altIndex: number) => {
+        const lines = alt.source
+          .split('\n')
+          .filter((line: string) => line.trim());
+        const firstTwoLines = lines.slice(0, 2).map((line: string) => {
+          const trimmed = line.trim().slice(0, 12);
+          return trimmed + (line.length > 12 ? '...' : '');
+        });
+
         const altNode = {
           id: `${i + 1}-alt-${altIndex + 1}`,
-          label: `Alternative ${altIndex + 1}\n${alt.source.slice(0, 20)}...`,
-          x: xOffset + (altIndex + 1) * xSpacing,
+          label: firstTwoLines.join('\n') || '(empty)',
+          shape: 'box',
+          borderRadius: 8,
+          x: xOffset + altIndex * xSpacing,
           y: yOffset + i * ySpacing,
-          color: cellType === 'code' ? '#8dd3c7' : '#fb8072',
-          borderWidth: alt.isActive ? 3 : 1
+          color: isCollapsed ? '#808080' : '#8dd3c7', // Grey if collapsed, teal if not
+          borderWidth: altIndex === activeIndex ? 3 : 1,
+          widthConstraint: {
+            minimum: 135,
+            maximum: 135
+          },
+          heightConstraint: {
+            minimum: 50,
+            maximum: 50
+          }
         };
         this.nodes.add(altNode);
 
-        // Add edge between main cell and alternative
-        this.edges.add({
-          from: i + 1,
-          to: `${i + 1}-alt-${altIndex + 1}`,
-          dashes: true,
-          color: { color: '#848484' }
-        });
+        // Add edge to next cell's alternatives if not the last cell
+        if (i < cells.length - 1) {
+          const nextCell = cells.get(i + 1);
+          if (nextCell && nextCell.type === 'code') {
+            const nextActiveIndex =
+              this.alternativeManager.getActiveIndex(nextCell);
+            this.edges.add({
+              from: `${i + 1}-alt-${altIndex + 1}`,
+              to: `${i + 2}-alt-${nextActiveIndex + 1}`,
+              width: 1
+            });
+          }
+        }
       });
-
-      // Add edge to previous cell
-      if (i > 0) {
-        const newEdge = {
-          from: i,
-          to: i + 1,
-          width: isActive ? 3 : 1
-        };
-        console.log('Adding edge:', newEdge);
-        this.edges.add(newEdge);
-      }
     }
 
     // Update status message
-    this._content.innerHTML = `<div style="text-align: center;">Loaded ${cells.length} cells</div>`;
+    const codeCellCount = Array.from({ length: cells.length }).filter(
+      (_, i) => cells.get(i).type === 'code'
+    ).length;
+    this._content.innerHTML = `<div style="text-align: center;">Loaded ${codeCellCount} code cells</div>`;
   }
 
   clearNotebook(): void {

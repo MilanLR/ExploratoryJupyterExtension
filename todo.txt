@@ -2,7 +2,7 @@
 - think about graph
 - move graph init to schema
 
-execution flow
+execution flow -> %store???
 
 
 design / implementation

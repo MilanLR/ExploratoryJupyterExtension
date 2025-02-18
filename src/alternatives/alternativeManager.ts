@@ -22,10 +22,10 @@ export class AlternativeManager {
    * @returns The cell's alternatives data, including versions and active index
    */
   private getCellMetadata(cell: ICellModel): CellAlternatives {
-    const loadedMetadata = cell.sharedModel.getMetadata('alternatives');
+    const loadedMetadata = cell.sharedModel.getMetadata('alternatives-data');
     if (loadedMetadata === undefined) {
       return {
-        versions: [{ source: '' }],
+        versions: [{ source: cell.sharedModel.getSource() }],
         activeIndex: 0
       };
     }
@@ -39,7 +39,7 @@ export class AlternativeManager {
    * @param data The alternatives data to store
    */
   private setCellMetadata(cell: ICellModel, data: CellAlternatives) {
-    cell.sharedModel.setMetadata('alternatives', JSON.stringify(data));
+    cell.sharedModel.setMetadata('alternatives-data', JSON.stringify(data));
   }
 
   /**

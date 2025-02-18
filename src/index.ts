@@ -58,8 +58,21 @@ const plugin: JupyterFrontEndPlugin<void> = {
       });
     });
 
+    const collapsedManager = new CollapsedManager(
+      () => tracker.currentWidget,
+      app.commands
+    );
+
     // Initialize graph widget
-    activateGraph(app, palette, restorer, tracker, alternativeManager);
+    // Initialize graph widget
+    activateGraph(
+      app,
+      palette,
+      restorer,
+      tracker,
+      alternativeManager,
+      collapsedManager
+    );
 
     app.commands.addCommand(CommandIds.add, {
       icon: addIcon,
@@ -161,23 +174,15 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
     app.commands.addCommand(CommandIds.expand, {
       execute: () => {
-        const notebook = app.shell.currentWidget;
-        if (notebook instanceof NotebookPanel) {
-          const activeCell = notebook.content.activeCell;
-          if (activeCell) {
-            const manager = new CollapsedManager(notebook, app.commands);
-            manager.expand(activeCell.model);
-          }
+        const cell = tracker.activeCell;
+        if (cell) {
+          collapsedManager.expand(cell.model);
         }
       },
       isVisible: () => {
-        const notebook = app.shell.currentWidget;
-        if (notebook instanceof NotebookPanel) {
-          const activeCell = notebook.content.activeCell;
-          if (activeCell) {
-            const manager = new CollapsedManager(notebook, app.commands);
-            return manager.isCollapsed(activeCell.model);
-          }
+        const cell = tracker.activeCell;
+        if (cell) {
+          return collapsedManager.isCollapsed(cell.model);
         }
         return false;
       },
@@ -193,8 +198,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
             notebook.content.isSelectedOrActive(cell)
           );
           if (selectedCells.length > 1 && activeCell) {
-            const manager = new CollapsedManager(notebook, app.commands);
-            manager.collapse(
+            collapsedManager.collapse(
               selectedCells.map(cell => cell.model),
               activeCell.model
             );
@@ -241,7 +245,8 @@ const activateGraph = function (
   palette: ICommandPalette,
   restorer: ILayoutRestorer,
   notebookTracker: INotebookTracker,
-  alternativeManager: AlternativeManager
+  alternativeManager: AlternativeManager,
+  collapsedManager: CollapsedManager
 ) {
   let widget: GraphWidget;
 
@@ -253,7 +258,7 @@ const activateGraph = function (
       if (!widget || widget.isDisposed) {
         // Create a new widget if one does not exist
         // or if the previous one was disposed
-        widget = new GraphWidget(alternativeManager);
+        widget = new GraphWidget(alternativeManager, collapsedManager);
 
         // Add the widget to the left area
         app.shell.add(widget, 'left', {

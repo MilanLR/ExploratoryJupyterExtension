@@ -3,6 +3,7 @@ import { ICellModel } from '@jupyterlab/cells';
 import { CommandRegistry } from '@lumino/commands';
 interface StoredNode {
   cellId: string;
+  source: string;
   alternatives?: string[];
   activeVersion?: number;
   nestedNodes?: StoredNode[];
@@ -13,11 +14,11 @@ interface CollapsedMetadata {
 }
 
 export class CollapsedManager {
-  private notebookPanel: NotebookPanel;
+  private getNotebookPanel: () => NotebookPanel | null;
   private commands: CommandRegistry;
 
-  constructor(notebookPanel: NotebookPanel, commands: CommandRegistry) {
-    this.notebookPanel = notebookPanel;
+  constructor(getNotebookPanel: () => NotebookPanel | null, commands: CommandRegistry) {
+    this.getNotebookPanel = getNotebookPanel;
     this.commands = commands;
   }
 
@@ -27,12 +28,13 @@ export class CollapsedManager {
   private getCollapsedMetadata(
     cell: ICellModel
   ): CollapsedMetadata | undefined {
-    const loadedMetadata = cell.sharedModel.getMetadata('collapsed');
+    const loadedMetadata = cell.sharedModel.getMetadata('collapsed-data');
     if (loadedMetadata === undefined) {
       return {
         storedNodes: []
       };
     }
+    console.log('Loaded metadata:', loadedMetadata);
     const parsedMetadata = JSON.parse(loadedMetadata as string);
     return parsedMetadata as CollapsedMetadata;
   }
@@ -44,7 +46,7 @@ export class CollapsedManager {
     cell: ICellModel,
     metadata: CollapsedMetadata
   ): void {
-    cell.sharedModel.setMetadata('collapsed', JSON.stringify(metadata));
+    cell.sharedModel.setMetadata('collapsed-data', JSON.stringify(metadata));
   }
 
   /**
@@ -60,6 +62,12 @@ export class CollapsedManager {
 
     if (cells.length < 2) {
       console.log('Not enough cells to collapse');
+      return;
+    }
+
+    const notebookPanel = this.getNotebookPanel();
+    if (!notebookPanel) {
+      console.log('No notebook panel found');
       return;
     }
 
@@ -105,6 +113,7 @@ export class CollapsedManager {
 
       const node = {
         cellId: cell.id,
+        source: cell.sharedModel.getSource(),
         alternatives,
         activeVersion,
         nestedNodes: collapsedMetadata?.storedNodes
@@ -152,10 +161,8 @@ export class CollapsedManager {
     // Remove all cells except the active cell
     for (const cell of cellsToCollapse) {
       console.log('Removing cell:', cell.id);
-      this.notebookPanel.model?.sharedModel.deleteCell(
-        this.notebookPanel.model?.sharedModel.cells.findIndex(
-          c => c.id === cell.id
-        )
+      notebookPanel.model?.sharedModel.deleteCell(
+        notebookPanel.model?.sharedModel.cells.findIndex(c => c.id === cell.id)
       );
     }
 
@@ -173,7 +180,72 @@ export class CollapsedManager {
    * Expand previously collapsed cells
    */
   public expand(cell: ICellModel): void {
-    console.log('Expanding cell:', cell);
+    const notebookPanel = this.getNotebookPanel();
+    if (!notebookPanel) {
+      console.log('No notebook panel found');
+      return;
+    }
+
+    console.log('Starting expand operation for cell:', cell.id);
+
+    // Get the collapsed metadata
+    const metadata = this.getCollapsedMetadata(cell);
+    if (!metadata || metadata.storedNodes.length === 0) {
+      console.log('No collapsed cells found in metadata');
+      return;
+    }
+
+    console.log('Found stored nodes:', {
+      count: metadata.storedNodes.length,
+      nodes: metadata.storedNodes.map(node => node.cellId)
+    });
+
+    // Get the index of the current cell
+    const currentIndex = notebookPanel.model?.sharedModel.cells.findIndex(
+      c => c.id === cell.id
+    );
+
+    if (currentIndex === undefined || currentIndex === -1) {
+      console.log('Could not find current cell in notebook');
+      return;
+    }
+
+    // Create new cells for each stored node
+    metadata.storedNodes.forEach((node, index) => {
+      console.log('Restoring cell:', node.cellId);
+
+      // Create a new cell
+      const newCell = notebookPanel.model?.sharedModel.insertCell(
+        currentIndex + 1 + index,
+        {
+          cell_type: 'code',
+          id: node.cellId,
+          source: node.source
+        }
+      );
+      if (!newCell) {
+        console.log('Failed to create new cell');
+        return;
+      }
+      if (node.alternatives) {
+        newCell.setMetadata(
+          'alternatives-data',
+          JSON.stringify({
+            versions: node.alternatives,
+            activeIndex: node.activeVersion
+          })
+        );
+      }
+      newCell.setMetadata(
+        'collapsed-data',
+        JSON.stringify({
+          storedNodes: node.nestedNodes || []
+        })
+      );
+    });
+
+    // remove old cell
+    notebookPanel.model?.sharedModel.deleteCell(currentIndex);
   }
 
   /**
