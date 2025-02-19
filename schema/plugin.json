@@ -80,17 +80,13 @@
                   "type": "string",
                   "description": "ID of the collapsed cell"
                 },
-                "alternatives": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  },
-                  "description": "Alternative versions of the collapsed cell"
+                "source": {
+                  "type": "string",
+                  "description": "Source code of the collapsed cell"
                 },
-                "activeVersion": {
-                  "type": "integer",
-                  "minimum": 0,
-                  "description": "Index of active version for this collapsed cell"
+                "alternativeMetadata": {
+                  "type": "object",
+                  "description": "Alternative metadata of the collapsed cell"
                 },
                 "nestedNodes": {
                   "type": "array",

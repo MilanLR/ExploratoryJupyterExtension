@@ -4,6 +4,8 @@ import addIconStr from '../style/icons/add.svg';
 import caretLeftIconStr from '../style/icons/caret-left.svg';
 import caretRightIconStr from '../style/icons/caret-right.svg';
 import deleteIconStr from '../style/icons/delete.svg';
+import playIconStr from '../style/icons/play.svg';
+import playBlackIconStr from '../style/icons/play-black.svg';
 
 export const graphIcon = new LabIcon({
   name: 'exploratory:graph',
@@ -28,4 +30,14 @@ export const caretRightIcon = new LabIcon({
 export const deleteIcon = new LabIcon({
   name: 'exploratory:delete',
   svgstr: deleteIconStr
+});
+
+export const playIcon = new LabIcon({
+  name: 'exploratory:play',
+  svgstr: playIconStr
+});
+
+export const playBlackIcon = new LabIcon({
+  name: 'exploratory:play-black',
+  svgstr: playBlackIconStr
 });

@@ -1,5 +1,4 @@
 import { NotebookPanel } from '@jupyterlab/notebook';
-import { ICellModel } from '@jupyterlab/cells';
 
 interface IVariableState {
   value: string;

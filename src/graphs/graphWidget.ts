@@ -4,6 +4,7 @@ import { NotebookStore } from '../stores/notebookStore';
 import { INotebookModel } from '@jupyterlab/notebook';
 import { AlternativeManager } from '../managers/alternativeManager';
 import { CollapsedManager } from '../managers/collapsedManager';
+import { graphIcon, playBlackIcon } from '../icons';
 
 export class GraphWidget extends Widget {
   private network: Network;
@@ -13,6 +14,7 @@ export class GraphWidget extends Widget {
   private alternativeManager: AlternativeManager;
   private currentNotebook: INotebookModel | null = null;
   private collapsedManager: CollapsedManager;
+  private contextMenu: HTMLDivElement;
 
   constructor(
     alternativeManager: AlternativeManager,
@@ -21,15 +23,25 @@ export class GraphWidget extends Widget {
     super();
     this.alternativeManager = alternativeManager;
     this.collapsedManager = collapsedManager;
-    this.addClass('jp-GraphWidget');
     this.id = 'graph-widget';
-    this.title.label = 'Graph View';
+    this.title.icon = graphIcon;
+    this.title.caption = 'Graph View';
     this.title.closable = true;
 
     // Create a container for our content
     this._content = document.createElement('div');
     this._content.className = 'jp-GraphWidget-content';
     this.node.appendChild(this._content);
+
+    // Add run session button
+    const runButton = document.createElement('button');
+    runButton.className = 'jp-GraphWidget-runButton';
+    runButton.innerHTML = 'Run full session';
+    runButton.onclick = () => {
+      // TODO: Implement run session functionality
+      console.log('Run full session clicked');
+    };
+    this.node.appendChild(runButton);
 
     // Show initial message
     this.clearNotebook();
@@ -67,6 +79,91 @@ export class GraphWidget extends Widget {
 
     this.network = new Network(container, data, options);
 
+    // Create context menu element
+    this.contextMenu = document.createElement('div');
+    this.contextMenu.className = 'jp-GraphWidget-contextMenu';
+    this.contextMenu.style.position = 'absolute';
+    this.contextMenu.style.display = 'none';
+    this.contextMenu.style.zIndex = '1000';
+    this.contextMenu.style.backgroundColor = 'white';
+    this.contextMenu.style.border = '1px solid #ccc';
+    this.contextMenu.style.padding = '5px';
+    this.contextMenu.style.boxShadow = '2px 2px 6px rgba(0,0,0,0.2)';
+    document.body.appendChild(this.contextMenu);
+
+    // Add context menu event handler
+    this.network.on('oncontext', properties => {
+      properties.event.preventDefault();
+      const { pointer, nodes, edges } = properties;
+
+      // Clear previous menu
+      this.contextMenu.innerHTML = '';
+
+      // Get the node/edge at the clicked position
+      const clickedNodeId = this.network.getNodeAt(pointer.DOM) as string;
+      const clickedEdgeId = this.network.getEdgeAt(pointer.DOM) as string;
+
+      // Only show menu if clicking on something
+      if (!clickedNodeId && !clickedEdgeId) {
+        this.contextMenu.style.display = 'none';
+        return;
+      }
+
+      if (clickedNodeId) {
+        // Node context menu
+        const nodeId = clickedNodeId;
+        const [cellIndexStr, , altIndexStr] = nodeId.split('-');
+        const cellIndex = parseInt(cellIndexStr) - 1;
+
+        if (!this.currentNotebook) return;
+        const cell = this.currentNotebook.cells.get(cellIndex);
+        if (!cell) return;
+
+        // Add Run Node option at the top of the menu
+        this.addMenuItem('Run Node', () => {
+          console.log('Run node clicked:', nodeId);
+        });
+
+        // Add separator
+        const separator = document.createElement('div');
+        separator.className = 'jp-GraphWidget-menuSeparator';
+        this.contextMenu.appendChild(separator);
+
+        if (this.collapsedManager.isCollapsed(cell)) {
+          // Collapsed node menu
+          this.addMenuItem('Expand', () => {
+            this.collapsedManager.expand(cell);
+            this.updateNotebook(this.currentNotebook);
+          });
+        } else {
+          // Normal node menu
+          this.addMenuItem('Add Alternative', () => {
+            this.alternativeManager.addAlternative(
+              cell.sharedModel.getSource(),
+              cell
+            );
+            this.updateNotebook(this.currentNotebook);
+          });
+        }
+      } else if (clickedEdgeId) {
+        // Edge context menu
+        this.addMenuItem('Remove Edge', () => {
+          this.edges.remove(clickedEdgeId);
+        });
+      }
+
+      // Position and show menu
+      const rect = container.getBoundingClientRect();
+      this.contextMenu.style.left = pointer.DOM.x + rect.left + 'px';
+      this.contextMenu.style.top = pointer.DOM.y + rect.top + 'px';
+      this.contextMenu.style.display = 'block';
+    });
+
+    // Hide context menu when clicking elsewhere
+    document.addEventListener('click', () => {
+      this.contextMenu.style.display = 'none';
+    });
+
     // Add double click event handler
     this.network.on('doubleClick', properties => {
       const nodeId = properties.nodes[0];
@@ -102,6 +199,16 @@ export class GraphWidget extends Widget {
     );
   }
 
+  private addMenuItem(label: string, onClick: () => void): void {
+    const item = document.createElement('div');
+    item.className = 'jp-GraphWidget-menuItem';
+    item.style.padding = '5px 10px';
+    item.style.cursor = 'pointer';
+    item.textContent = label;
+    item.addEventListener('click', onClick);
+    this.contextMenu.appendChild(item);
+  }
+
   updateNotebook(notebook: INotebookModel | null): void {
     this.currentNotebook = notebook;
     console.log('Widget received notebook data:', notebook);
@@ -120,7 +227,7 @@ export class GraphWidget extends Widget {
 
     const xOffset = 350; // Base offset from left
     const yOffset = 350; // Offset from top
-    const ySpacing = 100; // Vertical space between nodes
+    const ySpacing = 200; // Vertical space between nodes
     const xSpacing = 200; // Horizontal space between alternatives
 
     for (let i = 0; i < cells.length; i++) {
@@ -167,7 +274,7 @@ export class GraphWidget extends Widget {
         this.nodes.add(altNode);
 
         // Add edge to next cell's alternatives if not the last cell
-        if (i < cells.length - 1) {
+        if (i < cells.length - 1 && altIndex === activeIndex) {
           const nextCell = cells.get(i + 1);
           if (nextCell && nextCell.type === 'code') {
             const nextActiveIndex =
@@ -186,7 +293,22 @@ export class GraphWidget extends Widget {
     const codeCellCount = Array.from({ length: cells.length }).filter(
       (_, i) => cells.get(i).type === 'code'
     ).length;
-    this._content.innerHTML = `<div style="text-align: center;">Loaded ${codeCellCount} code cells</div>`;
+
+    // Count total alternatives
+    let totalAlternatives = 0;
+    for (let i = 0; i < cells.length; i++) {
+      const cell = cells.get(i);
+      if (cell.type === 'code') {
+        const alternatives = this.alternativeManager.getAlternatives(cell);
+        totalAlternatives += alternatives.length;
+      }
+    }
+
+    this._content.innerHTML = `
+      <div style="text-align: center; padding: 10px; background-color: var(--jp-layout-color1); border-radius: 4px;">
+        Loaded ${codeCellCount} code cells (${totalAlternatives} alternatives)
+      </div>
+    `;
   }
 
   clearNotebook(): void {

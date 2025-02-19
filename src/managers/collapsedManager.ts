@@ -1,11 +1,10 @@
 import { NotebookPanel } from '@jupyterlab/notebook';
 import { ICellModel } from '@jupyterlab/cells';
-import { CommandRegistry } from '@lumino/commands';
+
 interface StoredNode {
   cellId: string;
   source: string;
-  alternatives?: string[];
-  activeVersion?: number;
+  alternativeMetadata?: string;
   nestedNodes?: StoredNode[];
 }
 
@@ -15,11 +14,9 @@ interface CollapsedMetadata {
 
 export class CollapsedManager {
   private getNotebookPanel: () => NotebookPanel | null;
-  private commands: CommandRegistry;
 
-  constructor(getNotebookPanel: () => NotebookPanel | null, commands: CommandRegistry) {
+  constructor(getNotebookPanel: () => NotebookPanel | null) {
     this.getNotebookPanel = getNotebookPanel;
-    this.commands = commands;
   }
 
   /**
@@ -98,15 +95,8 @@ export class CollapsedManager {
     // Create list of nested nodes with their metadata
     const storedNodes: StoredNode[] = codeCells.map(cell => {
       // Get alternatives metadata if it exists
-      const alternativesMetadata = cell.sharedModel.getMetadata('alternatives');
-      let alternatives: string[] | undefined;
-      let activeVersion: number | undefined;
-
-      if (alternativesMetadata) {
-        const parsed = JSON.parse(alternativesMetadata as string);
-        alternatives = parsed.versions;
-        activeVersion = parsed.activeVersion;
-      }
+      const alternativesMetadata =
+        cell.sharedModel.getMetadata('alternatives-data');
 
       // Get any existing collapsed metadata
       const collapsedMetadata = this.getCollapsedMetadata(cell);
@@ -114,16 +104,15 @@ export class CollapsedManager {
       const node = {
         cellId: cell.id,
         source: cell.sharedModel.getSource(),
-        alternatives,
-        activeVersion,
+        alternativeMetadata: alternativesMetadata
+          ? JSON.stringify(alternativesMetadata)
+          : undefined,
         nestedNodes: collapsedMetadata?.storedNodes
       };
 
       console.log('Created stored node:', {
         cellId: node.cellId,
-        hasAlternatives: alternatives !== undefined,
-        alternativesCount: alternatives?.length,
-        activeVersion,
+        alternativeMetadata: node.alternativeMetadata,
         hasNestedNodes: node.nestedNodes !== undefined,
         nestedNodesCount: node.nestedNodes?.length
       });
@@ -157,7 +146,6 @@ export class CollapsedManager {
       activeCellId: activeCell.id,
       storedNodesCount: storedNodes.length
     });
-
     // Remove all cells except the active cell
     for (const cell of cellsToCollapse) {
       console.log('Removing cell:', cell.id);
@@ -170,7 +158,6 @@ export class CollapsedManager {
       activeCell: activeCell.id,
       storedNodes: storedNodes.map(node => ({
         cellId: node.cellId,
-        hasAlternatives: node.alternatives !== undefined,
         hasNestedNodes: node.nestedNodes !== undefined
       }))
     });
@@ -227,13 +214,10 @@ export class CollapsedManager {
         console.log('Failed to create new cell');
         return;
       }
-      if (node.alternatives) {
+      if (node.alternativeMetadata) {
         newCell.setMetadata(
           'alternatives-data',
-          JSON.stringify({
-            versions: node.alternatives,
-            activeIndex: node.activeVersion
-          })
+          JSON.parse(node.alternativeMetadata)
         );
       }
       newCell.setMetadata(

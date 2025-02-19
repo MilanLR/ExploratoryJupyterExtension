@@ -51,11 +51,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
         app.commands.notifyCommandChanged(id);
       });
     });
+    console.log(app.commands.listCommands());
 
-    const collapsedManager = new CollapsedManager(
-      () => tracker.currentWidget,
-      app.commands
-    );
+    const collapsedManager = new CollapsedManager(() => tracker.currentWidget);
 
     // Initialize graph widget
     activateGraph(
