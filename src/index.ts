@@ -17,6 +17,7 @@ import {
 import { AlternativeManager } from './managers/alternativeManager';
 import { CollapsedManager } from './managers/collapsedManager';
 import { NotebookPanel } from '@jupyterlab/notebook';
+import { KernelMessage } from '@jupyterlab/services';
 
 const CommandIds = {
   add: 'alternative-command-add',
@@ -25,7 +26,8 @@ const CommandIds = {
   delete: 'alternative-command-delete',
   open: 'graph-widget:open',
   expand: 'collapsed-command-expand',
-  collapse: 'collapsed-command-collapse'
+  collapse: 'collapsed-command-collapse',
+  runTests: 'run-tests'
 };
 
 /**
@@ -51,7 +53,78 @@ const plugin: JupyterFrontEndPlugin<void> = {
         app.commands.notifyCommandChanged(id);
       });
     });
-    console.log(app.commands.listCommands());
+
+    const onIOPubMessage = (msg: KernelMessage.IIOPubMessage) => {
+      console.log('IOPub:', msg);
+      const content = msg.content as
+        | { name: string; text: string }
+        | { execution_state: string };
+
+      if (
+        msg.header.msg_type === 'stream' &&
+        'name' in content &&
+        content.name === 'stdout'
+      ) {
+        const notebookPanel = app.shell.currentWidget as NotebookPanel;
+        if (!notebookPanel) {
+          return;
+        }
+
+        const activeCell = notebookPanel.content.activeCell;
+        if (!activeCell) {
+          return;
+        }
+
+        const alternativeIndex = alternativeManager.getActiveIndex(
+          activeCell.model
+        );
+
+        // Get the output text from the message
+        const outputText = content.text;
+
+        // Add the output to the active cell's model
+        const outputModel = {
+          output_type: 'execute_result',
+          name: `stdout-${alternativeIndex}`,
+          data: {
+            'text/plain': outputText
+          },
+          execution_count: 'a' + alternativeIndex
+        };
+
+        if ('outputs' in activeCell.model) {
+          (activeCell.model.outputs as any).add(outputModel);
+        }
+      }
+    };
+
+    // Set initial output to test kernel connection
+    app.commands.addCommand(CommandIds.runTests, {
+      label: 'Run tests',
+      execute: () => {
+        const notebookPanel = tracker.currentWidget;
+        if (notebookPanel) {
+          const kernel = notebookPanel.sessionContext.session?.kernel;
+          if (kernel) {
+            const a = kernel.requestExecute({
+              code: `
+_cell_states = {}
+get_ipython()._cell_states = _cell_states
+print("Kernel connection established")
+print("Cell states:", _cell_states)`,
+              silent: false,
+              store_history: false
+            });
+            a.onReply = msg => {
+              console.log('Reply:', msg);
+            };
+            a.onIOPub = onIOPubMessage;
+          }
+        }
+      }
+    });
+
+    palette.addItem({ command: CommandIds.runTests, category: 'Tutorial' });
 
     const collapsedManager = new CollapsedManager(() => tracker.currentWidget);
 
@@ -238,6 +311,32 @@ const plugin: JupyterFrontEndPlugin<void> = {
     tracker.selectionChanged.connect((_, cells) => {
       app.commands.notifyCommandChanged(CommandIds.collapse);
       app.commands.notifyCommandChanged(CommandIds.expand);
+    });
+
+    // Add execution listener to maintain alternative version numbering
+    tracker.currentChanged.connect((_, notebook) => {
+      if (notebook) {
+        notebook.context.sessionContext.kernelChanged.connect((_, changed) => {
+          if (changed.newValue) {
+            changed.newValue.iopubMessage.connect((_, msg) => {
+              if (msg.header.msg_type === 'execute_input') {
+                const cell = tracker.activeCell;
+                if (cell && cell.model.type === 'code') {
+                  const alternativeIndex = alternativeManager.getActiveIndex(
+                    cell.model
+                  );
+                  // Use setTimeout to let Jupyter set its count first, then override
+                  setTimeout(() => {
+                    if ('executionCount' in cell.model) {
+                      cell.model.executionCount = `a${alternativeIndex}`;
+                    }
+                  }, 1);
+                }
+              }
+            });
+          }
+        });
+      }
     });
 
     console.log('Extension activated!');

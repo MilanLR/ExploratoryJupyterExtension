@@ -100,6 +100,9 @@ export class AlternativeManager {
     // Update the cell's content with the new alternative
     cell.sharedModel.setSource(cellData.versions[altIndex].source);
     this.refreshButtonsCallback();
+    if ('executionCount' in cell) {
+      cell.executionCount = `a${altIndex}`;
+    }
   }
 
   /**
