@@ -18,6 +18,8 @@ import { AlternativeManager } from './managers/alternativeManager';
 import { CollapsedManager } from './managers/collapsedManager';
 import { NotebookPanel } from '@jupyterlab/notebook';
 import { KernelMessage } from '@jupyterlab/services';
+import { kernelManager } from './managers/kernelManager';
+import { setExecutionCount } from './cellUtils';
 
 const CommandIds = {
   add: 'alternative-command-add',
@@ -327,15 +329,28 @@ print("Cell states:", _cell_states)`,
                   );
                   // Use setTimeout to let Jupyter set its count first, then override
                   setTimeout(() => {
-                    if ('executionCount' in cell.model) {
-                      cell.model.executionCount = `a${alternativeIndex}`;
-                    }
-                  }, 1);
+                    setExecutionCount(cell.model, `a${alternativeIndex}`);
+                  }, 10);
                 }
               }
             });
           }
         });
+      }
+    });
+
+    // Add kernel manager initialization
+    tracker.currentChanged.connect((_, notebook) => {
+      if (notebook) {
+        // kernelManager.setKernel(
+        //   notebook.sessionContext.session?.kernel ?? null
+        // );
+
+        notebook.sessionContext.kernelChanged.connect((_, changed) => {
+          kernelManager.setKernel(changed.newValue ?? null);
+        });
+      } else {
+        kernelManager.setKernel(null);
       }
     });
 

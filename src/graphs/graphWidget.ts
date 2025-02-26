@@ -1,10 +1,10 @@
 import { Widget } from '@lumino/widgets';
-import { DataSet, Network, Edge, Node, Options } from 'vis-network/standalone';
-import { NotebookStore } from '../stores/notebookStore';
+import { DataSet, Network, Options } from 'vis-network/standalone';
 import { INotebookModel } from '@jupyterlab/notebook';
 import { AlternativeManager } from '../managers/alternativeManager';
 import { CollapsedManager } from '../managers/collapsedManager';
-import { graphIcon, playBlackIcon } from '../icons';
+import { graphIcon } from '../icons';
+import { KernelManager, kernelManager } from '../managers/kernelManager';
 
 export class GraphWidget extends Widget {
   private network: Network;
@@ -74,6 +74,27 @@ export class GraphWidget extends Widget {
             scaleFactor: 1
           }
         }
+      },
+      manipulation: {
+        enabled: true,
+        addNode: false,
+        deleteNode: false,
+        addEdge: (edgeData: any, callback: Function) => {
+          if (edgeData.from && edgeData.to) {
+            callback(edgeData);
+          }
+        },
+        editEdge: false
+      },
+      interaction: {
+        dragNodes: false,
+        dragView: true
+      },
+      nodes: {
+        fixed: {
+          x: true,
+          y: true
+        }
       }
     };
 
@@ -114,14 +135,15 @@ export class GraphWidget extends Widget {
         const nodeId = clickedNodeId;
         const [cellIndexStr, , altIndexStr] = nodeId.split('-');
         const cellIndex = parseInt(cellIndexStr) - 1;
-
+        const altIndex = parseInt(altIndexStr) - 1;
         if (!this.currentNotebook) return;
         const cell = this.currentNotebook.cells.get(cellIndex);
         if (!cell) return;
 
         // Add Run Node option at the top of the menu
-        this.addMenuItem('Run Node', () => {
+        this.addMenuItem('Run Node', async () => {
           console.log('Run node clicked:', nodeId);
+          await kernelManager.executeCell(cell, altIndex);
         });
 
         // Add separator
@@ -144,6 +166,16 @@ export class GraphWidget extends Widget {
             );
             this.updateNotebook(this.currentNotebook);
           });
+          if (altIndexStr) {
+            const altIndex = parseInt(altIndexStr) - 1;
+            const activeIndex = this.alternativeManager.getActiveIndex(cell);
+            if (altIndex !== activeIndex) {
+              this.addMenuItem('Select Alternative', () => {
+                this.alternativeManager.switchToAlternative(cell, altIndex);
+                this.updateNotebook(this.currentNotebook);
+              });
+            }
+          }
         }
       } else if (clickedEdgeId) {
         // Edge context menu
@@ -185,18 +217,6 @@ export class GraphWidget extends Widget {
       // Switch to the selected alternative
       this.alternativeManager.switchToAlternative(cell, altIndex);
     });
-
-    // Subscribe to notebook changes
-    NotebookStore.subscribe(
-      s => s.activeNotebookContent,
-      notebookContent => {
-        if (notebookContent) {
-          this.updateNotebook(notebookContent);
-        } else {
-          this.clearNotebook();
-        }
-      }
-    );
   }
 
   private addMenuItem(label: string, onClick: () => void): void {
@@ -230,6 +250,46 @@ export class GraphWidget extends Widget {
     const ySpacing = 200; // Vertical space between nodes
     const xSpacing = 200; // Horizontal space between alternatives
 
+    // Add START node
+    this.nodes.add({
+      id: 'START',
+      label: 'START',
+      shape: 'box',
+      borderRadius: 8,
+      x: xOffset,
+      y: yOffset - ySpacing, // Position it above the first row
+      color: '#ffd700', // Yellow color
+      borderWidth: 2,
+      font: {
+        size: 24,
+        bold: true
+      },
+      widthConstraint: {
+        minimum: 135,
+        maximum: 135
+      },
+      heightConstraint: {
+        minimum: 50,
+        maximum: 50
+      }
+    });
+
+    // Find first code cell and its active alternative
+    for (let i = 0; i < cells.length; i++) {
+      const cell = cells.get(i);
+      if (cell.type === 'code') {
+        const activeIndex = this.alternativeManager.getActiveIndex(cell);
+        // Add edge from START to first active code cell
+        this.edges.add({
+          from: 'START',
+          to: `${i + 1}-alt-${activeIndex + 1}`,
+          width: 2
+        });
+        break;
+      }
+    }
+
+    // Create a node for each cell
     for (let i = 0; i < cells.length; i++) {
       const cell = cells.get(i);
 
@@ -243,14 +303,18 @@ export class GraphWidget extends Widget {
       const activeIndex = this.alternativeManager.getActiveIndex(cell);
       const isCollapsed = this.collapsedManager.isCollapsed(cell);
 
+      // Calculate x positions to center alternatives
+      const totalWidth = (alternatives.length - 1) * xSpacing;
+      const startX = xOffset - totalWidth / 2;
+
       // Create nodes for each alternative
       alternatives.forEach((alt: any, altIndex: number) => {
         const lines = alt.source
           .split('\n')
           .filter((line: string) => line.trim());
         const firstTwoLines = lines.slice(0, 2).map((line: string) => {
-          const trimmed = line.trim().slice(0, 12);
-          return trimmed + (line.length > 12 ? '...' : '');
+          const trimmed = line.trim().slice(0, 11);
+          return trimmed + (line.length > 11 ? '...' : '');
         });
 
         const altNode = {
@@ -258,9 +322,9 @@ export class GraphWidget extends Widget {
           label: firstTwoLines.join('\n') || '(empty)',
           shape: 'box',
           borderRadius: 8,
-          x: xOffset + altIndex * xSpacing,
+          x: startX + altIndex * xSpacing, // Center alternatives around xOffset
           y: yOffset + i * ySpacing,
-          color: isCollapsed ? '#808080' : '#8dd3c7', // Grey if collapsed, teal if not
+          color: isCollapsed ? '#808080' : '#8dd3c7',
           borderWidth: altIndex === activeIndex ? 3 : 1,
           widthConstraint: {
             minimum: 135,

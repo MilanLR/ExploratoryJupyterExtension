@@ -15,7 +15,7 @@ interface ICellState {
   }[];
 }
 
-export class StateManager {
+export class KernelManager {
   constructor(notebookPanel: NotebookPanel) {
     this._notebookPanel = notebookPanel;
     this._states = new Map<string, ICellState>();
