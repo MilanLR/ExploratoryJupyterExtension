@@ -1,14 +1,14 @@
 import { NotebookPanel } from '@jupyterlab/notebook';
 import { ICellModel } from '@jupyterlab/cells';
 
-interface StoredNode {
+export interface StoredNode {
   cellId: string;
   source: string;
   alternativeMetadata?: string;
   nestedNodes?: StoredNode[];
 }
 
-interface CollapsedMetadata {
+export interface CollapsedMetadata {
   storedNodes: StoredNode[];
 }
 
@@ -22,16 +22,13 @@ export class CollapsedManager {
   /**
    * Get the metadata for a collapsed cell
    */
-  private getCollapsedMetadata(
-    cell: ICellModel
-  ): CollapsedMetadata | undefined {
+  public getCollapsedMetadata(cell: ICellModel): CollapsedMetadata | undefined {
     const loadedMetadata = cell.sharedModel.getMetadata('collapsed-data');
     if (loadedMetadata === undefined) {
       return {
         storedNodes: []
       };
     }
-    console.log('Loaded metadata:', loadedMetadata);
     const parsedMetadata = JSON.parse(loadedMetadata as string);
     return parsedMetadata as CollapsedMetadata;
   }
@@ -105,7 +102,7 @@ export class CollapsedManager {
         cellId: cell.id,
         source: cell.sharedModel.getSource(),
         alternativeMetadata: alternativesMetadata
-          ? JSON.stringify(alternativesMetadata)
+          ? (alternativesMetadata as string)
           : undefined,
         nestedNodes: collapsedMetadata?.storedNodes
       };

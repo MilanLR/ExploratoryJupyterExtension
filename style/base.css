@@ -121,3 +121,19 @@
   background-color: var(--jp-layout-color2);
 }
 
+.jp-GraphWidget-zoomOutButton {
+  position: absolute;
+  top: 10px;
+  right: 150px;
+  z-index: 1;
+  padding: 6px 12px;
+  background-color: var(--jp-layout-color1);
+  border: 1px solid var(--jp-border-color1);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.jp-GraphWidget-zoomOutButton:hover {
+  background-color: var(--jp-layout-color2);
+}
+

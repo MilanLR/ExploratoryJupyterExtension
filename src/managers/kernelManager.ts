@@ -1,6 +1,6 @@
 import { Kernel, KernelMessage } from '@jupyterlab/services';
 import { Signal } from '@lumino/signaling';
-import { ICellModel } from '@jupyterlab/cells';
+import { ICellModel, ICodeCellModel } from '@jupyterlab/cells';
 import { AlternativeManager } from './alternativeManager';
 import { clearOutputs, setExecutionCount } from '../cellUtils';
 import { IOutput } from '@jupyterlab/nbformat';
@@ -38,7 +38,6 @@ export class KernelManager {
     if (!this.kernel) {
       throw new Error('No kernel available');
     }
-    this.kernel.createComm;
 
     return this.kernel.requestExecute({
       code: code,
@@ -59,20 +58,23 @@ export class KernelManager {
     });
 
     return new Promise((resolve, reject) => {
-      future.onIOPub = (msg: KernelMessage.IIOPubMessage) => {
-        if (
-          msg.header.msg_type === 'execute_result' ||
-          msg.header.msg_type === 'display_data'
-        ) {
-          resolve(msg.content as KernelMessage.IExecuteResultMsg['content']);
-        }
-      };
-
       future.onReply = (msg: KernelMessage.IExecuteReplyMsg) => {
         if (msg.content.status === 'error') {
           reject(msg.content);
         }
       };
+
+      // Register message hook for this execution
+      this.kernel!.registerMessageHook(future.msg.header.msg_id, msg => {
+        if (
+          msg.header.msg_type === 'execute_result' ||
+          msg.header.msg_type === 'display_data'
+        ) {
+          resolve(msg.content as KernelMessage.IExecuteResultMsg['content']);
+          return true;
+        }
+        return true;
+      });
     });
   }
 
@@ -102,8 +104,9 @@ export class KernelManager {
 
     const future = this.requestExecuteCode(code);
 
-    future.onIOPub = (msg: KernelMessage.IIOPubMessage) => {
-      console.log('IOPub message received:', msg);
+    // Register message hook for this execution
+    this.kernel.registerMessageHook(future.msg.header.msg_id, msg => {
+      console.log('Message hook received:', msg);
 
       if (KernelMessage.isStatusMsg(msg)) {
         const status = msg.content.execution_state;
@@ -113,18 +116,23 @@ export class KernelManager {
         } else if (status === 'idle') {
           setExecutionCount(cell, `a${alternativeIndex}`);
         }
-      } else if ('outputs' in cell) {
+      } else if ('outputs' in cell && !KernelMessage.isExecuteInputMsg(msg)) {
         const output = {
           ...msg.content,
           execution_count: `a${alternativeIndex}` as any,
           output_type: KernelMessage.isStreamMsg(msg)
             ? 'stream'
-            : 'execute_result'
+            : KernelMessage.isErrorMsg(msg)
+              ? 'error'
+              : 'execute_result'
         };
         console.log('Adding output:', output);
         (cell.outputs as any).add(output);
       }
-    };
+
+      // Return true to keep the message in the kernel's message handling pipeline
+      return false;
+    });
 
     return future;
   }

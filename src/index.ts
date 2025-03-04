@@ -258,9 +258,17 @@ print("Cell states:", _cell_states)`,
         }
       },
       isVisible: () => {
-        const cell = tracker.activeCell;
-        if (cell) {
-          return collapsedManager.isCollapsed(cell.model);
+        const notebook = app.shell.currentWidget;
+        if (notebook instanceof NotebookPanel) {
+          const selectedCells = notebook.content.widgets.filter(cell =>
+            notebook.content.isSelectedOrActive(cell)
+          );
+          if (selectedCells.length === 1) {
+            const cell = tracker.activeCell;
+            if (cell) {
+              return collapsedManager.isCollapsed(cell.model);
+            }
+          }
         }
         return false;
       },
@@ -289,7 +297,6 @@ print("Cell states:", _cell_states)`,
           const selectedCells = notebook.content.widgets.filter(cell =>
             notebook.content.isSelectedOrActive(cell)
           );
-          console.log('Selected cells:', selectedCells);
           return selectedCells.length > 1;
         }
         return false;
@@ -398,7 +405,10 @@ const activateGraph = function (
         // Set up notebook change listeners
         setupNotebookListeners(widget, notebookTracker);
       }
+
+      // Show the widget and activate it in the left panel
       widget.show();
+      app.shell.activateById(widget.id);
     }
   });
 

@@ -5,7 +5,7 @@ interface AlternativeVersion {
   source: string;
 }
 
-interface CellAlternatives {
+export interface CellAlternatives {
   versions: AlternativeVersion[];
   activeIndex: number;
 }
