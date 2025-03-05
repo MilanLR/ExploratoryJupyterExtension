@@ -101,9 +101,10 @@ export class CollapsedManager {
       const node = {
         cellId: cell.id,
         source: cell.sharedModel.getSource(),
-        alternativeMetadata: alternativesMetadata
-          ? (alternativesMetadata as string)
-          : undefined,
+        alternativeMetadata:
+          alternativesMetadata !== undefined
+            ? (alternativesMetadata as string) // Keep it as the original string format
+            : undefined,
         nestedNodes: collapsedMetadata?.storedNodes
       };
 
@@ -127,6 +128,13 @@ export class CollapsedManager {
     // Update the active cell's source to include collapsed cells
     const originalSource = activeCell.sharedModel.getSource();
     activeCell.sharedModel.setSource(combinedSource);
+    activeCell.sharedModel.setMetadata(
+      'alternatives-data',
+      JSON.stringify({
+        versions: [{ source: combinedSource }],
+        activeIndex: 0
+      })
+    );
 
     console.log('Updated active cell source:', {
       originalLength: originalSource.length,
@@ -211,18 +219,30 @@ export class CollapsedManager {
         console.log('Failed to create new cell');
         return;
       }
+
+      // Only set alternatives metadata if it existed before
       if (node.alternativeMetadata) {
-        newCell.setMetadata(
-          'alternatives-data',
-          JSON.parse(node.alternativeMetadata)
+        newCell.setMetadata('alternatives-data', node.alternativeMetadata);
+        console.log('Restored alternatives metadata for cell:', node.cellId);
+      } else {
+        // Make sure no alternatives metadata is set to avoid auto-creation
+        newCell.deleteMetadata('alternatives-data');
+        console.log(
+          'No alternatives metadata to restore for cell:',
+          node.cellId
         );
       }
-      newCell.setMetadata(
-        'collapsed-data',
-        JSON.stringify({
-          storedNodes: node.nestedNodes || []
-        })
-      );
+
+      // Set collapsed metadata
+      if (node.nestedNodes && node.nestedNodes.length > 0) {
+        newCell.setMetadata(
+          'collapsed-data',
+          JSON.stringify({
+            storedNodes: node.nestedNodes
+          })
+        );
+        console.log('Restored nested collapsed nodes for cell:', node.cellId);
+      }
     });
 
     // remove old cell

@@ -172,7 +172,7 @@ export class GraphWidget extends Widget {
             const storedNode = currentZoom.metadata.storedNodes[index];
 
             // Add options for stored nodes
-            this.addMenuItem('Run Node', () => {
+            this.addMenuItem('Execute', () => {
               console.log('Run stored node clicked:', nodeId);
               // Implement execution logic for stored nodes
             });
@@ -221,9 +221,9 @@ export class GraphWidget extends Widget {
           const cell = this.currentNotebook.cells.get(cellIndex);
           if (!cell) return;
 
-          // Add Run Node option at the top of the menu
-          this.addMenuItem('Run Node', async () => {
-            console.log('Run node clicked:', nodeId);
+          // Add Execute option at the top of the menu
+          this.addMenuItem('Execute', async () => {
+            console.log('Execute clicked:', nodeId);
             await kernelManager.executeCell(cell, altIndex);
           });
 
@@ -275,9 +275,9 @@ export class GraphWidget extends Widget {
         }
       } else if (clickedEdgeId) {
         // Edge context menu
-        this.addMenuItem('Remove Edge', () => {
-          this.edges.remove(clickedEdgeId);
-        });
+        // this.addMenuItem('Remove Edge', () => {
+        //   this.edges.remove(clickedEdgeId);
+        // });
       }
 
       // Position and show menu - adjust for zoom level
@@ -345,35 +345,31 @@ export class GraphWidget extends Widget {
       this.displayStoredNodes(storedNodes);
 
       // Recenter after a short delay to ensure nodes are rendered
-      setTimeout(() => {
-        this.network.moveTo({
-          position: {
-            x: 400,
-            y: 600
-          },
-          animation: {
-            duration: 1000,
-            easingFunction: 'easeInOutQuad'
-          }
-        });
-      }, 100);
+      this.network.moveTo({
+        position: {
+          x: 400,
+          y: 600
+        },
+        animation: {
+          duration: 0,
+          easingFunction: 'easeInOutQuad'
+        }
+      });
     } else {
       // Normal notebook view
       this.updateNotebook(this.currentNotebook);
 
       // Recenter after a short delay to ensure nodes are rendered
-      setTimeout(() => {
-        this.network.moveTo({
-          position: {
-            x: 400,
-            y: 600
-          },
-          animation: {
-            duration: 1000,
-            easingFunction: 'easeInOutQuad'
-          }
-        });
-      }, 100);
+      this.network.moveTo({
+        position: {
+          x: 400,
+          y: 600
+        },
+        animation: {
+          duration: 0,
+          easingFunction: 'easeInOutQuad'
+        }
+      });
     }
   }
 
@@ -633,7 +629,7 @@ export class GraphWidget extends Widget {
 
     this._content.innerHTML = `
       <div style="text-align: center; padding: 10px; background-color: var(--jp-layout-color1); border-radius: 4px;">
-        Loaded ${codeCellCount} code cells (${totalAlternatives} alternatives)
+        Viewing ${codeCellCount} code cells (${totalAlternatives} alternatives)
       </div>
     `;
   }

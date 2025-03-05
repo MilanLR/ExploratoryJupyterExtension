@@ -203,18 +203,6 @@ print("Cell states:", _cell_states)`,
       },
       isVisible: () => tracker.activeCell?.model.type === 'code',
       isEnabled: () => {
-        const kernel =
-          tracker.currentWidget?.context.sessionContext.session?.kernel;
-        if (kernel) {
-          kernel.requestExecute({
-            code: 'print(csv if "csv" in locals() else "csv variable not found")'
-          }).onIOPub = msg => {
-            if (msg.header.msg_type === 'stream') {
-              console.log('csv variable:', (msg as any).content.text);
-            }
-          };
-        }
-
         const cell = tracker.activeCell;
         if (!cell) return false;
         const versions = alternativeManager.getAlternatives(cell.model);
