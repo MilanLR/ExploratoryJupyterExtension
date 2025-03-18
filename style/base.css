@@ -115,6 +115,7 @@
   height: 1px;
   background-color: #ddd;
   margin: 5px 0;
+  border-top: 1px solid #ccc;
 }
 
 .jp-GraphWidget-menuItem:hover {
@@ -135,5 +136,34 @@
 
 .jp-GraphWidget-zoomOutButton:hover {
   background-color: var(--jp-layout-color2);
+}
+
+/* Context Menu */
+.jp-GraphWidget-contextMenu {
+  position: absolute;
+  display: none;
+  z-index: 1000;
+  background-color: white;
+  border: 1px solid #ccc;
+  padding: 5px;
+  box-shadow: 2px 2px 6px rgba(0,0,0,0.2);
+  border-radius: 4px;
+}
+
+.jp-GraphWidget-menuItem {
+  padding: 5px 10px;
+  cursor: pointer;
+  border-radius: 2px;
+}
+
+.jp-GraphWidget-menuItem:hover {
+  background-color: var(--jp-layout-color2);
+}
+
+.jp-GraphWidget-menuSeparator {
+  height: 1px;
+  background-color: #ddd;
+  margin: 5px 0;
+  border-top: 1px solid #ccc;
 }
 

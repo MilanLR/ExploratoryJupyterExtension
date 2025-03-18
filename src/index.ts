@@ -5,6 +5,7 @@ import {
 } from '@jupyterlab/application';
 import { ICommandPalette, WidgetTracker } from '@jupyterlab/apputils';
 import { INotebookTracker } from '@jupyterlab/notebook';
+import { IDocumentManager } from '@jupyterlab/docmanager';
 import { GraphWidget } from './graphs/graphWidget';
 import '../style/base.css';
 import {
@@ -20,6 +21,7 @@ import { NotebookPanel } from '@jupyterlab/notebook';
 import { KernelMessage } from '@jupyterlab/services';
 import { kernelManager } from './managers/kernelManager';
 import { setExecutionCount } from './cellUtils';
+import { TempNotebookManager } from './managers/tempNotebookManager';
 
 const CommandIds = {
   add: 'alternative-command-add',
@@ -40,14 +42,33 @@ const plugin: JupyterFrontEndPlugin<void> = {
   description:
     'A JupyterLab extension to give better support for exploratory programming.',
   autoStart: true,
-  requires: [ICommandPalette, INotebookTracker],
+  requires: [ICommandPalette, INotebookTracker, IDocumentManager],
   optional: [ILayoutRestorer],
   activate: (
     app: JupyterFrontEnd,
     palette: ICommandPalette,
     tracker: INotebookTracker,
+    docManager: IDocumentManager,
     restorer: ILayoutRestorer
   ) => {
+    // Add cleanup function at the start of activate
+    const cleanupTempNotebooks = async () => {
+      const contents = app.serviceManager.contents;
+      const files = await contents.get('');
+      for (const file of files.content) {
+        if (
+          file.name.match(
+            /^temp-notebook-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.ipynb$/i
+          )
+        ) {
+          await contents.delete(file.path);
+        }
+      }
+    };
+
+    // Clean up temp notebooks on startup
+    cleanupTempNotebooks().catch(console.error);
+
     // Initialize the alternative manager
     const alternativeManager = new AlternativeManager(() => {
       // Refresh button states
@@ -129,6 +150,11 @@ print("Cell states:", _cell_states)`,
     palette.addItem({ command: CommandIds.runTests, category: 'Tutorial' });
 
     const collapsedManager = new CollapsedManager(() => tracker.currentWidget);
+    const tempNotebookManager = new TempNotebookManager(
+      app,
+      docManager,
+      collapsedManager
+    );
 
     // Initialize graph widget
     activateGraph(
@@ -137,7 +163,8 @@ print("Cell states:", _cell_states)`,
       restorer,
       tracker,
       alternativeManager,
-      collapsedManager
+      collapsedManager,
+      tempNotebookManager
     );
 
     app.commands.addCommand(CommandIds.add, {
@@ -359,7 +386,8 @@ const activateGraph = function (
   restorer: ILayoutRestorer,
   notebookTracker: INotebookTracker,
   alternativeManager: AlternativeManager,
-  collapsedManager: CollapsedManager
+  collapsedManager: CollapsedManager,
+  tempNotebookManager: TempNotebookManager
 ) {
   let widget: GraphWidget;
 
@@ -371,7 +399,11 @@ const activateGraph = function (
       if (!widget || widget.isDisposed) {
         // Create a new widget if one does not exist
         // or if the previous one was disposed
-        widget = new GraphWidget(alternativeManager, collapsedManager);
+        widget = new GraphWidget(
+          alternativeManager,
+          collapsedManager,
+          tempNotebookManager
+        );
 
         // Add the widget to the left area
         app.shell.add(widget, 'left', {
@@ -383,15 +415,19 @@ const activateGraph = function (
 
         // Initial check for open notebook
         const current = notebookTracker.currentWidget;
-        if (current && current.content.model) {
+        if (
+          current &&
+          current.content.model &&
+          !tempNotebookManager.isTempNotebook(current)
+        ) {
           console.log('Initial notebook loaded');
-          widget.updateNotebook(current.content.model);
+          widget.updateNotebook(current);
         } else {
           widget.clearNotebook();
         }
 
         // Set up notebook change listeners
-        setupNotebookListeners(widget, notebookTracker);
+        setupNotebookListeners(widget, notebookTracker, tempNotebookManager);
       }
 
       // Show the widget and activate it in the left panel
@@ -422,22 +458,27 @@ const activateGraph = function (
 // Helper function to set up notebook listeners
 function setupNotebookListeners(
   widget: GraphWidget,
-  notebookTracker: INotebookTracker
+  notebookTracker: INotebookTracker,
+  tempNotebookManager: TempNotebookManager
 ) {
   // Listen for notebook changes
   notebookTracker.currentChanged.connect(() => {
     const current = notebookTracker.currentWidget;
 
-    if (current && current.content.model) {
+    if (
+      current &&
+      current.content.model &&
+      !tempNotebookManager.isTempNotebook(current)
+    ) {
       console.log('Switched to different notebook');
-      widget.updateNotebook(current.content.model);
+      widget.updateNotebook(current);
 
       // Listen for changes in the current notebook's content
       current.content.model.contentChanged.connect(() => {
         console.log(
           'Notebook content changed - cells modified, added, or deleted'
         );
-        widget.updateNotebook(current.content.model);
+        widget.updateNotebook(current);
       });
     } else {
       console.log('No notebook open, clearing widget');
@@ -447,9 +488,13 @@ function setupNotebookListeners(
   // Listen for active cell changes
   notebookTracker.activeCellChanged.connect(() => {
     const current = notebookTracker.currentWidget;
-    if (current && current.content.model) {
+    if (
+      current &&
+      current.content.model &&
+      !tempNotebookManager.isTempNotebook(current)
+    ) {
       console.log('Active cell changed - cursor moved to different cell');
-      widget.updateNotebook(current.content.model);
+      widget.updateNotebook(current);
     }
   });
 }

@@ -1,6 +1,6 @@
 import { Widget } from '@lumino/widgets';
 import { DataSet, Network, Options } from 'vis-network/standalone';
-import { INotebookModel } from '@jupyterlab/notebook';
+import { INotebookModel, NotebookPanel } from '@jupyterlab/notebook';
 import {
   AlternativeManager,
   CellAlternatives
@@ -11,10 +11,13 @@ import { KernelManager, kernelManager } from '../managers/kernelManager';
 import { ICellModel } from '@jupyterlab/cells';
 import { CollapsedMetadata } from '../managers/collapsedManager';
 import { StoredNode } from '../managers/collapsedManager';
+import { TempNotebookManager } from '../managers/tempNotebookManager';
+import { Signal } from '@lumino/signaling';
 
 interface ZoomState {
   node: ICellModel;
   metadata: CollapsedMetadata;
+  notebookPanel: NotebookPanel;
 }
 
 export class GraphWidget extends Widget {
@@ -23,19 +26,22 @@ export class GraphWidget extends Widget {
   private edges: any;
   private _content: HTMLElement;
   private alternativeManager: AlternativeManager;
-  private currentNotebook: INotebookModel | null = null;
+  private currentNotebookPanel: NotebookPanel | null = null;
   private collapsedManager: CollapsedManager;
+  private tempNotebookManager: TempNotebookManager;
   private contextMenu: HTMLDivElement;
   private zoomStack: ZoomState[] = [];
   private zoomOutButton: HTMLButtonElement;
 
   constructor(
     alternativeManager: AlternativeManager,
-    collapsedManager: CollapsedManager
+    collapsedManager: CollapsedManager,
+    tempNotebookManager: TempNotebookManager
   ) {
     super();
     this.alternativeManager = alternativeManager;
     this.collapsedManager = collapsedManager;
+    this.tempNotebookManager = tempNotebookManager;
     this.id = 'graph-widget';
     this.title.icon = graphIcon;
     this.title.caption = 'Graph View';
@@ -53,7 +59,17 @@ export class GraphWidget extends Widget {
     this.zoomOutButton.style.display = 'none';
     this.zoomOutButton.onclick = () => {
       if (this.zoomStack.length > 0) {
-        this.zoomStack.pop();
+        const currentZoom = this.zoomStack.pop();
+
+        // If we still have items in the zoom stack, bring the parent notebook to front
+        if (this.zoomStack.length > 0) {
+          const parentZoom = this.zoomStack[this.zoomStack.length - 1];
+          this.tempNotebookManager.setTempNotebookFront(parentZoom.node);
+          this.tempNotebookManager.closeNotebook(currentZoom?.notebookPanel!);
+        } else {
+          this.tempNotebookManager.closeNotebook(currentZoom?.notebookPanel!);
+        }
+
         this.updateGraphDisplay();
       }
     };
@@ -129,13 +145,6 @@ export class GraphWidget extends Widget {
     // Create context menu element
     this.contextMenu = document.createElement('div');
     this.contextMenu.className = 'jp-GraphWidget-contextMenu';
-    this.contextMenu.style.position = 'absolute';
-    this.contextMenu.style.display = 'none';
-    this.contextMenu.style.zIndex = '1000';
-    this.contextMenu.style.backgroundColor = 'white';
-    this.contextMenu.style.border = '1px solid #ccc';
-    this.contextMenu.style.padding = '5px';
-    this.contextMenu.style.boxShadow = '2px 2px 6px rgba(0,0,0,0.2)';
     document.body.appendChild(this.contextMenu);
 
     // Add context menu event handler
@@ -172,10 +181,17 @@ export class GraphWidget extends Widget {
             const storedNode = currentZoom.metadata.storedNodes[index];
 
             // Add options for stored nodes
-            this.addMenuItem('Execute', () => {
+            this.addMenuItem('Execute', async () => {
               console.log('Run stored node clicked:', nodeId);
-              // Implement execution logic for stored nodes
+              await kernelManager.executeNestedCell(
+                currentZoom.node,
+                storedNode.source,
+                this.zoomStack.length
+              );
             });
+
+            // Add separator after Execute option
+            this.addSeparator();
 
             // If this node has alternatives and this isn't the active one
             const alternativesMetadata: CellAlternatives = JSON.parse(
@@ -200,14 +216,77 @@ export class GraphWidget extends Widget {
               this.addMenuItem('Zoom In', () => {
                 // Create a new zoom state for this nested node
                 const nestedMetadata = {
-                  storedNodes: storedNode.nestedNodes
+                  storedNodes: storedNode.nestedNodes ?? []
                 };
+
+                const notebookCells = currentZoom.notebookPanel.model?.cells;
+                console.log('notebookCells:', notebookCells);
+                console.log('storedNode:', storedNode);
+                if (!notebookCells) {
+                  console.error('No notebook cells found');
+                  return;
+                }
+                let cell: ICellModel | null = null;
+                for (const tcell of notebookCells) {
+                  console.log('cell.id:', tcell.id);
+                  console.log('storedNode.cellId:', storedNode.cellId);
+                  if (tcell.id == storedNode.cellId) {
+                    cell = tcell;
+                    break;
+                  }
+                }
+
+                if (!cell) {
+                  console.error('Cell not found');
+                  return;
+                }
+
+                const panel = this.tempNotebookManager.openTempNotebook(
+                  cell,
+                  nestedMetadata,
+                  currentZoom.notebookPanel
+                );
+                if (!panel) {
+                  console.error('Failed to open temp notebook');
+                  return;
+                }
 
                 this.zoomStack.push({
                   node: currentZoom.node, // Keep the same parent node
-                  metadata: nestedMetadata as CollapsedMetadata
+                  metadata: nestedMetadata as CollapsedMetadata,
+                  notebookPanel: panel
                 });
 
+                this.updateGraphDisplay();
+              });
+
+              // Add Expand option for nested nodes
+              this.addMenuItem('Expand', () => {
+                console.log('Expanding nested node:', storedNode.cellId);
+
+                // Call expandNestedNode on the parent cell
+                this.collapsedManager.expandNestedNode(
+                  currentZoom.node,
+                  storedNode.cellId
+                );
+
+                // Force a complete view refresh
+                if (this.zoomStack.length > 0) {
+                  // Get the current zoom state to refresh its metadata
+                  const currentZoom = this.zoomStack[this.zoomStack.length - 1];
+
+                  // Reload the metadata from the node (it might have changed)
+                  const updatedMetadata =
+                    this.collapsedManager.getCollapsedMetadata(
+                      currentZoom.node
+                    );
+                  if (updatedMetadata) {
+                    // Update our zoom stack with fresh metadata
+                    currentZoom.metadata = updatedMetadata;
+                  }
+                }
+
+                // Refresh the display with updated metadata
                 this.updateGraphDisplay();
               });
             }
@@ -217,8 +296,8 @@ export class GraphWidget extends Widget {
           const [cellIndexStr, , altIndexStr] = nodeId.split('-');
           const cellIndex = parseInt(cellIndexStr) - 1;
           const altIndex = parseInt(altIndexStr) - 1;
-          if (!this.currentNotebook) return;
-          const cell = this.currentNotebook.cells.get(cellIndex);
+          if (!this.currentNotebookPanel) return;
+          const cell = this.currentNotebookPanel.model?.cells.get(cellIndex);
           if (!cell) return;
 
           // Add Execute option at the top of the menu
@@ -228,18 +307,35 @@ export class GraphWidget extends Widget {
           });
 
           // Add separator
-          const separator = document.createElement('div');
-          separator.className = 'jp-GraphWidget-menuSeparator';
-          this.contextMenu.appendChild(separator);
+          this.addSeparator();
 
           if (this.collapsedManager.isCollapsed(cell)) {
             // Add Zoom option for collapsed nodes
             this.addMenuItem('Zoom In', () => {
               const metadata = this.collapsedManager.getCollapsedMetadata(cell);
               if (metadata) {
+                const notebookCells =
+                  this.currentNotebookPanel?.model?.sharedModel.cells;
+                if (!notebookCells) {
+                  console.error('No notebook cells found');
+                  return;
+                }
+
+                const panel = this.tempNotebookManager.openTempNotebook(
+                  cell,
+                  metadata,
+                  this.currentNotebookPanel!
+                );
+
+                if (!panel) {
+                  console.error('Failed to open temp notebook');
+                  return;
+                }
+
                 this.zoomStack.push({
                   node: cell,
-                  metadata: metadata
+                  metadata: metadata,
+                  notebookPanel: panel
                 });
                 this.updateGraphDisplay();
               }
@@ -249,7 +345,7 @@ export class GraphWidget extends Widget {
             if (this.zoomStack.length === 0) {
               this.addMenuItem('Expand', () => {
                 this.collapsedManager.expand(cell);
-                this.updateNotebook(this.currentNotebook);
+                this.updateNotebook(this.currentNotebookPanel);
               });
             }
           } else {
@@ -259,7 +355,7 @@ export class GraphWidget extends Widget {
                 cell.sharedModel.getSource(),
                 cell
               );
-              this.updateNotebook(this.currentNotebook);
+              this.updateNotebook(this.currentNotebookPanel);
             });
             if (altIndexStr) {
               const altIndex = parseInt(altIndexStr) - 1;
@@ -267,7 +363,7 @@ export class GraphWidget extends Widget {
               if (altIndex !== activeIndex) {
                 this.addMenuItem('Select Alternative', () => {
                   this.alternativeManager.switchToAlternative(cell, altIndex);
-                  this.updateNotebook(this.currentNotebook);
+                  this.updateNotebook(this.currentNotebookPanel);
                 });
               }
             }
@@ -307,24 +403,40 @@ export class GraphWidget extends Widget {
       const cellIndex = parseInt(cellIndexStr) - 1; // Subtract 1 since node IDs are 1-based
       const altIndex = parseInt(altIndexStr) - 1; // Subtract 1 since alt IDs are 1-based
 
-      if (!this.currentNotebook) return;
+      if (!this.currentNotebookPanel) return;
 
-      const cell = this.currentNotebook.cells.get(cellIndex);
+      const cell = this.currentNotebookPanel.model?.cells.get(cellIndex);
       if (!cell) return;
 
       // Switch to the selected alternative
       this.alternativeManager.switchToAlternative(cell, altIndex);
     });
+
+    // Listen for changes in temp notebooks
+    this.tempNotebookManager.tempNotebookChanged.connect(
+      this._onTempNotebookChanged,
+      this
+    );
+
+    // Listen for temp notebook activation
+    this.tempNotebookManager.tempNotebookActivated.connect(
+      this._onTempNotebookActivated,
+      this
+    );
   }
 
   private addMenuItem(label: string, onClick: () => void): void {
     const item = document.createElement('div');
     item.className = 'jp-GraphWidget-menuItem';
-    item.style.padding = '5px 10px';
-    item.style.cursor = 'pointer';
     item.textContent = label;
     item.addEventListener('click', onClick);
     this.contextMenu.appendChild(item);
+  }
+
+  private addSeparator(): void {
+    const separator = document.createElement('div');
+    separator.className = 'jp-GraphWidget-menuSeparator';
+    this.contextMenu.appendChild(separator);
   }
 
   private updateGraphDisplay(): void {
@@ -357,7 +469,7 @@ export class GraphWidget extends Widget {
       });
     } else {
       // Normal notebook view
-      this.updateNotebook(this.currentNotebook);
+      this.updateNotebook(this.currentNotebookPanel);
 
       // Recenter after a short delay to ensure nodes are rendered
       this.network.moveTo({
@@ -451,10 +563,6 @@ export class GraphWidget extends Widget {
           }
         });
 
-        console.log('nodeId:', nodeId);
-        console.log('index:', index);
-        console.log('altIndex:', altIndex);
-        console.log('activeIndex:', activeIndex);
         // Add edge from previous node or START
         if (index === 0 && altIndex === activeIndex) {
           this.edges.add({
@@ -482,13 +590,40 @@ export class GraphWidget extends Widget {
     `;
   }
 
-  updateNotebook(notebook: INotebookModel | null): void {
-    this.currentNotebook = notebook;
+  updateNotebook(notebook: NotebookPanel | null): void {
+    this.currentNotebookPanel = notebook;
     console.log('Widget received notebook data:', notebook);
 
     if (!notebook) {
       this.clearNotebook();
       return;
+    }
+
+    // Check if this is a temp notebook and get its source info
+    let isTemp = false;
+    let sourceInfo: any = null;
+
+    if (this.tempNotebookManager.isTempNotebook(notebook)) {
+      isTemp = true;
+      sourceInfo = this.tempNotebookManager.getSourceInfo(
+        notebook.context.path
+      );
+
+      // If we have source info, use the source notebook for our display
+      if (sourceInfo) {
+        // We'll still display the zoomed view, but make sure we have the latest data
+        // Update the zoom stack with fresh metadata if needed
+        if (this.zoomStack.length > 0) {
+          const currentZoom = this.zoomStack[this.zoomStack.length - 1];
+          // Refresh metadata from the source cell
+          const updatedMetadata = this.collapsedManager.getCollapsedMetadata(
+            sourceInfo.sourceCell
+          );
+          if (updatedMetadata) {
+            currentZoom.metadata = updatedMetadata;
+          }
+        }
+      }
     }
 
     // If we're zoomed in, maintain the zoomed view
@@ -502,7 +637,11 @@ export class GraphWidget extends Widget {
     this.edges.clear();
 
     // Create a node for each cell
-    const cells = notebook.cells;
+    const cells = notebook.model?.cells;
+    if (!cells) {
+      console.error('No cells found');
+      return;
+    }
 
     const xOffset = 350; // Base offset from left
     const yOffset = 350; // Offset from top
@@ -638,4 +777,77 @@ export class GraphWidget extends Widget {
     this._content.innerHTML =
       '<div style="text-align: center;">Please open a notebook to start using this extension</div>';
   }
+
+  // Add a method to handle temp notebook changes
+  private _onTempNotebookChanged = (
+    sender: TempNotebookManager,
+    tempNotebookPath: string
+  ): void => {
+    console.log(
+      'Graph widget notified of temp notebook change:',
+      tempNotebookPath
+    );
+
+    // Get the source info for this temp notebook
+    const sourceInfo = this.tempNotebookManager.getSourceInfo(tempNotebookPath);
+    if (!sourceInfo) return;
+
+    // If we're zoomed in, update the zoom stack with fresh metadata
+    if (this.zoomStack.length > 0) {
+      const currentZoom = this.zoomStack[this.zoomStack.length - 1];
+
+      // Refresh metadata from the source cell
+      const updatedMetadata = this.collapsedManager.getCollapsedMetadata(
+        sourceInfo.sourceCell
+      );
+
+      if (updatedMetadata) {
+        // Update our zoom stack with fresh metadata
+        currentZoom.metadata = updatedMetadata;
+
+        // Refresh the display with updated metadata
+        this.updateGraphDisplay();
+      }
+    }
+  };
+
+  // Add a method to handle temp notebook activation
+  private _onTempNotebookActivated = (
+    sender: TempNotebookManager,
+    info: any // TempNotebookInfo
+  ): void => {
+    console.log('Temp notebook activated:', info.tempNotebookPath);
+
+    // Check if this notebook is already in our zoom stack
+    const existingZoomIndex = this.zoomStack.findIndex(
+      zoom => zoom.notebookPanel === info.tempNotebook
+    );
+
+    if (existingZoomIndex >= 0) {
+      console.log(
+        'Notebook already in zoom stack at index:',
+        existingZoomIndex
+      );
+      // If it's not the top of the stack, we need to adjust
+      if (existingZoomIndex < this.zoomStack.length - 1) {
+        // Remove all zoom states above this one
+        this.zoomStack.splice(existingZoomIndex + 1);
+        this.updateGraphDisplay();
+      }
+      return;
+    }
+
+    // If not in zoom stack, we need to add it
+    const metadata = this.collapsedManager.getCollapsedMetadata(
+      info.sourceCell
+    );
+    if (metadata) {
+      this.zoomStack.push({
+        node: info.sourceCell,
+        metadata: metadata,
+        notebookPanel: info.tempNotebook
+      });
+      this.updateGraphDisplay();
+    }
+  };
 }

@@ -36,11 +36,31 @@ export class CollapsedManager {
   /**
    * Set the metadata for a collapsed cell
    */
-  private setCollapsedMetadata(
+  public setCollapsedMetadata(
     cell: ICellModel,
     metadata: CollapsedMetadata
   ): void {
     cell.sharedModel.setMetadata('collapsed-data', JSON.stringify(metadata));
+  }
+
+  public updateCellSource(cell: ICellModel): void {
+    const metadata = this.getCollapsedMetadata(cell);
+    if (!metadata) {
+      return;
+    }
+
+    // Recursively get all source code from stored nodes
+    const getAllSources = (nodes: StoredNode[]): string[] => {
+      const sources: string[] = [];
+      for (const node of nodes) {
+        sources.push(node.source);
+      }
+      return sources;
+    };
+
+    const sources = getAllSources(metadata.storedNodes);
+    const combinedSource = sources.join('\n\n');
+    cell.sharedModel.setSource(combinedSource);
   }
 
   /**
@@ -247,6 +267,79 @@ export class CollapsedManager {
 
     // remove old cell
     notebookPanel.model?.sharedModel.deleteCell(currentIndex);
+  }
+
+  public expandNestedNode(cell: ICellModel, cellIdToExpand: string): void {
+    console.log('Starting expandNestedNode operation:', {
+      parentCellId: cell.id,
+      cellIdToExpand
+    });
+
+    // Get the collapsed metadata
+    const metadata = this.getCollapsedMetadata(cell);
+    if (!metadata || metadata.storedNodes.length === 0) {
+      console.log('No collapsed nodes found in metadata');
+      return;
+    }
+
+    // Function to recursively find the node and replace it with its nested nodes
+    const findAndReplaceNode = (nodes: StoredNode[]): boolean => {
+      // Check if the node is directly in this array
+      const directIndex = nodes.findIndex(
+        node => node.cellId === cellIdToExpand
+      );
+
+      if (directIndex >= 0) {
+        // Found the node, replace it with its nested nodes (if any)
+        const targetNode = nodes[directIndex];
+        console.log('Found node to expand:', {
+          nodeId: targetNode.cellId,
+          hasNestedNodes:
+            targetNode.nestedNodes && targetNode.nestedNodes.length > 0,
+          nestedNodesCount: targetNode.nestedNodes?.length || 0
+        });
+
+        // Remove the node from the array
+        nodes.splice(directIndex, 1);
+
+        // If it has nested nodes, insert them in its place
+        if (targetNode.nestedNodes && targetNode.nestedNodes.length > 0) {
+          nodes.splice(directIndex, 0, ...targetNode.nestedNodes);
+          console.log('Replaced node with its nested nodes:', {
+            originalNodeId: targetNode.cellId,
+            insertedNodes: targetNode.nestedNodes.length
+          });
+        }
+        return true;
+      }
+
+      // Recursively check nested nodes
+      for (const node of nodes) {
+        if (node.nestedNodes && node.nestedNodes.length > 0) {
+          const found = findAndReplaceNode(node.nestedNodes);
+          if (found) {
+            return true;
+          }
+        }
+      }
+
+      return false;
+    };
+
+    // Find and replace the node with its nested nodes
+    const nodeFound = findAndReplaceNode(metadata.storedNodes);
+
+    if (!nodeFound) {
+      console.log(
+        `Node with cellId ${cellIdToExpand} not found in collapsed metadata`
+      );
+      return;
+    }
+
+    // Update the cell's metadata
+    this.setCollapsedMetadata(cell, metadata);
+
+    console.log('Updated cell metadata after expanding nested node');
   }
 
   /**

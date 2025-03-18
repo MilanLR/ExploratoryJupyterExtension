@@ -10,3 +10,17 @@ extra stuff:
 documentation for exlporation process
 documentation in cells/associated to cells
 reactive components
+
+
+
+TODO:
+- execution flow
+  - var execution flow
+    - save var states
+- check github autotest errors
+
+- execute zoomed-in nodes (output should also be in temp notebook)
+- Closing a "middle" view will break everything
+- bug for changing content in collapsed cell will not show new node text
+- try to fix performance
+- change output when switching variables (store output too)
