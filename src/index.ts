@@ -357,11 +357,21 @@ print("Cell states:", _cell_states)`,
     // Set up cell change tracking
     tracker.activeCellChanged.connect((_, cell) => {
       if (cell) {
+        // First check if cell is collapsed and set readOnly property
+        if (collapsedManager.isCollapsed(cell.model)) {
+          cell.editor?.setOption('readOnly', true);
+        } else {
+          cell.editor?.setOption('readOnly', false);
+        }
+
         cell.model.contentChanged.connect(() => {
-          alternativeManager.updateCurrentVersion(
-            cell.model,
-            cell.model.sharedModel.getSource()
-          );
+          // Only update if cell is not collapsed
+          if (!collapsedManager.isCollapsed(cell.model)) {
+            alternativeManager.updateCurrentVersion(
+              cell.model,
+              cell.model.sharedModel.getSource()
+            );
+          }
         });
       }
     });
