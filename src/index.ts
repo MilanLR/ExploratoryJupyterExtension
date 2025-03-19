@@ -12,7 +12,10 @@ import {
   addIcon,
   caretLeftIcon,
   caretRightIcon,
+  collapseIcon,
   deleteIcon,
+  expandIcon,
+  externalLinkIcon,
   graphIcon
 } from './icons';
 import { AlternativeManager } from './managers/alternativeManager';
@@ -31,8 +34,11 @@ const CommandIds = {
   open: 'graph-widget:open',
   expand: 'collapsed-command-expand',
   collapse: 'collapsed-command-collapse',
+  openNewTab: 'collapsed-command-open-new-tab',
   runTests: 'run-tests'
 };
+
+let graphWidget: GraphWidget;
 
 /**
  * Initialization data for the ExploratoryJupyterExtension extension.
@@ -69,7 +75,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
     // Clean up temp notebooks on startup
     cleanupTempNotebooks().catch(console.error);
 
-    // Initialize the alternative manager
+    // Initialize the managers
     const alternativeManager = new AlternativeManager(() => {
       // Refresh button states
       Object.values(CommandIds).forEach(id => {
@@ -156,7 +162,14 @@ print("Cell states:", _cell_states)`,
       collapsedManager
     );
 
-    // Initialize graph widget
+    // Initialize graph widget at the same level as managers
+    graphWidget = new GraphWidget(
+      alternativeManager,
+      collapsedManager,
+      tempNotebookManager
+    );
+
+    // Initialize graph widget functionality
     activateGraph(
       app,
       palette,
@@ -169,7 +182,6 @@ print("Cell states:", _cell_states)`,
 
     app.commands.addCommand(CommandIds.add, {
       icon: addIcon,
-      iconClass: 'teal-icon',
       caption: 'Add alternative version',
       execute: () => {
         const cell = tracker.activeCell;
@@ -184,7 +196,6 @@ print("Cell states:", _cell_states)`,
 
     app.commands.addCommand(CommandIds.left, {
       icon: caretLeftIcon,
-      iconClass: 'teal-icon',
       caption: () => {
         const cell = tracker.activeCell;
         if (!cell) return 'Move alternative version left';
@@ -212,7 +223,6 @@ print("Cell states:", _cell_states)`,
 
     app.commands.addCommand(CommandIds.right, {
       icon: caretRightIcon,
-      iconClass: 'teal-icon',
       caption: () => {
         const cell = tracker.activeCell;
         if (!cell) return 'Move alternative version right';
@@ -240,7 +250,6 @@ print("Cell states:", _cell_states)`,
 
     app.commands.addCommand(CommandIds.delete, {
       icon: deleteIcon,
-      iconClass: 'teal-icon',
       caption: () => {
         const cell = tracker.activeCell;
         if (!cell) return 'Delete alternative version';
@@ -266,6 +275,8 @@ print("Cell states:", _cell_states)`,
     });
 
     app.commands.addCommand(CommandIds.expand, {
+      icon: expandIcon,
+      label: 'Expand Collapsed Cells',
       execute: () => {
         const cell = tracker.activeCell;
         if (cell) {
@@ -275,22 +286,18 @@ print("Cell states:", _cell_states)`,
       isVisible: () => {
         const notebook = app.shell.currentWidget;
         if (notebook instanceof NotebookPanel) {
-          const selectedCells = notebook.content.widgets.filter(cell =>
-            notebook.content.isSelectedOrActive(cell)
-          );
-          if (selectedCells.length === 1) {
-            const cell = tracker.activeCell;
-            if (cell) {
-              return collapsedManager.isCollapsed(cell.model);
-            }
+          const cell = tracker.activeCell;
+          if (cell) {
+            return collapsedManager.isCollapsed(cell.model);
           }
         }
         return false;
-      },
-      label: 'Expand Collapsed Cells'
+      }
     });
 
     app.commands.addCommand(CommandIds.collapse, {
+      icon: collapseIcon,
+      label: 'Collapse Selected Cells',
       execute: () => {
         const notebook = app.shell.currentWidget;
         if (notebook instanceof NotebookPanel) {
@@ -315,9 +322,36 @@ print("Cell states:", _cell_states)`,
           return selectedCells.length > 1;
         }
         return false;
+      }
+    });
+
+    app.commands.addCommand(CommandIds.openNewTab, {
+      icon: externalLinkIcon,
+      label: 'Open node in new tab',
+      execute: () => {
+        const notebook = app.shell.currentWidget;
+        if (notebook instanceof NotebookPanel) {
+          const cell = tracker.activeCell;
+          if (cell && collapsedManager.isCollapsed(cell.model)) {
+            // Use the graphWidget directly
+            graphWidget.zoomToCell(cell.model, notebook);
+
+            // Ensure the graph widget is visible
+            // graphWidget.show();
+            app.shell.activateById(graphWidget.id);
+          }
+        }
       },
-      label: 'Collapse Selected Cells',
-      className: 'teal-icon'
+      isVisible: () => {
+        const notebook = app.shell.currentWidget;
+        if (notebook instanceof NotebookPanel) {
+          const cell = tracker.activeCell;
+          if (cell) {
+            return collapsedManager.isCollapsed(cell.model);
+          }
+        }
+        return false;
+      }
     });
 
     // Set up cell change tracking
@@ -389,29 +423,28 @@ const activateGraph = function (
   collapsedManager: CollapsedManager,
   tempNotebookManager: TempNotebookManager
 ) {
-  let widget: GraphWidget;
-
   // Add an application command
   app.commands.addCommand(CommandIds.open, {
     label: 'Open Graph Widget',
     icon: graphIcon,
     execute: () => {
-      if (!widget || widget.isDisposed) {
-        // Create a new widget if one does not exist
-        // or if the previous one was disposed
-        widget = new GraphWidget(
+      if (graphWidget.isDisposed) {
+        // Create a new widget if the previous one was disposed
+        graphWidget = new GraphWidget(
           alternativeManager,
           collapsedManager,
           tempNotebookManager
         );
+      }
 
-        // Add the widget to the left area
-        app.shell.add(widget, 'left', {
+      if (!graphWidget.isAttached) {
+        // Add the widget to the left area if it's not already attached
+        app.shell.add(graphWidget, 'left', {
           rank: 900
         });
 
         // Track the widget for restoration
-        widgetTracker.add(widget);
+        widgetTracker.add(graphWidget);
 
         // Initial check for open notebook
         const current = notebookTracker.currentWidget;
@@ -421,18 +454,22 @@ const activateGraph = function (
           !tempNotebookManager.isTempNotebook(current)
         ) {
           console.log('Initial notebook loaded');
-          widget.updateNotebook(current);
+          graphWidget.updateNotebook(current);
         } else {
-          widget.clearNotebook();
+          graphWidget.clearNotebook();
         }
 
         // Set up notebook change listeners
-        setupNotebookListeners(widget, notebookTracker, tempNotebookManager);
+        setupNotebookListeners(
+          graphWidget,
+          notebookTracker,
+          tempNotebookManager
+        );
       }
 
       // Show the widget and activate it in the left panel
-      widget.show();
-      app.shell.activateById(widget.id);
+      graphWidget.show();
+      app.shell.activateById(graphWidget.id);
     }
   });
 

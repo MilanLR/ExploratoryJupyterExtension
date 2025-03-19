@@ -850,4 +850,29 @@ export class GraphWidget extends Widget {
       this.updateGraphDisplay();
     }
   };
+
+  // Add this new method
+  zoomToCell(cell: ICellModel, notebookPanel: NotebookPanel): void {
+    const metadata = this.collapsedManager.getCollapsedMetadata(cell);
+    if (metadata) {
+      const panel = this.tempNotebookManager.openTempNotebook(
+        cell,
+        metadata,
+        notebookPanel
+      );
+
+      if (!panel) {
+        console.error('Failed to open temp notebook');
+        return;
+      }
+
+      this.zoomStack.push({
+        node: cell,
+        metadata: metadata,
+        notebookPanel: panel
+      });
+
+      this.updateGraphDisplay();
+    }
+  }
 }

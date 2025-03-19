@@ -30,12 +30,17 @@
       {
         "name": "expand",
         "command": "collapsed-command-expand",
-        "rank": 60
+        "rank": 30
       },
       {
         "name": "collapse",
         "command": "collapsed-command-collapse",
-        "rank": 60
+        "rank": 35
+      },
+      {
+        "name": "open-new-tab",
+        "command": "collapsed-command-open-new-tab",
+        "rank": 40
       }
     ]
   },
