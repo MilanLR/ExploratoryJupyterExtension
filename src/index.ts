@@ -24,7 +24,7 @@ import { NotebookPanel } from '@jupyterlab/notebook';
 import { KernelMessage } from '@jupyterlab/services';
 import { kernelManager } from './managers/kernelManager';
 import { setExecutionCount } from './cellUtils';
-import { TempNotebookManager } from './managers/tempNotebookManager';
+import { NotebookManager } from './managers/notebookManager';
 
 const CommandIds = {
   add: 'alternative-command-add',
@@ -57,24 +57,6 @@ const plugin: JupyterFrontEndPlugin<void> = {
     docManager: IDocumentManager,
     restorer: ILayoutRestorer
   ) => {
-    // Add cleanup function at the start of activate
-    const cleanupTempNotebooks = async () => {
-      const contents = app.serviceManager.contents;
-      const files = await contents.get('');
-      for (const file of files.content) {
-        if (
-          file.name.match(
-            /^temp-notebook-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.ipynb$/i
-          )
-        ) {
-          await contents.delete(file.path);
-        }
-      }
-    };
-
-    // Clean up temp notebooks on startup
-    cleanupTempNotebooks().catch(console.error);
-
     // Initialize the managers
     const alternativeManager = new AlternativeManager(() => {
       // Refresh button states
@@ -156,7 +138,7 @@ print("Cell states:", _cell_states)`,
     palette.addItem({ command: CommandIds.runTests, category: 'Tutorial' });
 
     const collapsedManager = new CollapsedManager(() => tracker.currentWidget);
-    const tempNotebookManager = new TempNotebookManager(
+    const tempNotebookManager = new NotebookManager(
       app,
       docManager,
       collapsedManager
@@ -327,7 +309,15 @@ print("Cell states:", _cell_states)`,
 
     app.commands.addCommand(CommandIds.openNewTab, {
       icon: externalLinkIcon,
-      label: 'Open node in new tab',
+      label: () => {
+        const cell = tracker.activeCell;
+        if (cell) {
+          return `Open ${
+            collapsedManager.getCollapsedMetadata(cell.model)?.notebookName
+          } in new tab`;
+        }
+        return 'Open in new tab';
+      },
       execute: () => {
         const notebook = app.shell.currentWidget;
         if (notebook instanceof NotebookPanel) {
@@ -431,7 +421,7 @@ const activateGraph = function (
   notebookTracker: INotebookTracker,
   alternativeManager: AlternativeManager,
   collapsedManager: CollapsedManager,
-  tempNotebookManager: TempNotebookManager
+  tempNotebookManager: NotebookManager
 ) {
   // Add an application command
   app.commands.addCommand(CommandIds.open, {
@@ -506,7 +496,7 @@ const activateGraph = function (
 function setupNotebookListeners(
   widget: GraphWidget,
   notebookTracker: INotebookTracker,
-  tempNotebookManager: TempNotebookManager
+  tempNotebookManager: NotebookManager
 ) {
   // Listen for notebook changes
   notebookTracker.currentChanged.connect(() => {

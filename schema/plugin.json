@@ -74,6 +74,11 @@
       "metadataSchema": {
         "type": "object",
         "properties": {
+          "notebookName": {
+            "type": "string",
+            "title": "Notebook Name",
+            "description": "Name of the notebook"
+          },
           "storedNodes": {
             "type": "array",
             "title": "Stored Nodes",

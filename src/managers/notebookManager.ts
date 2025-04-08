@@ -13,24 +13,27 @@ import {
   storedNodesToNotebookModel
 } from '../cellUtils';
 import { Signal } from '@lumino/signaling';
+import { showDialog, Dialog } from '@jupyterlab/apputils';
+import { Widget } from '@lumino/widgets';
+import { AlternativeManager } from './alternativeManager';
 
-interface TempNotebookInfo {
+interface NotebookInfo {
   sourceCell: ICellModel;
   sourceNotebook: NotebookPanel;
   tempNotebook: NotebookPanel;
   tempNotebookPath: string;
 }
 
-export class TempNotebookManager {
+export class NotebookManager {
   private app: JupyterFrontEnd;
   private docManager: IDocumentManager;
-  private tempNotebooks: Map<string, TempNotebookInfo> = new Map();
+  private tempNotebooks: Map<string, NotebookInfo> = new Map();
   private collapsedManager: CollapsedManager;
-  public tempNotebookChanged = new Signal<TempNotebookManager, string>(this);
-  public tempNotebookActivated = new Signal<
-    TempNotebookManager,
-    TempNotebookInfo
-  >(this);
+  private alternativeManager: AlternativeManager;
+  public tempNotebookChanged = new Signal<NotebookManager, string>(this);
+  public tempNotebookActivated = new Signal<NotebookManager, NotebookInfo>(
+    this
+  );
 
   constructor(
     app: JupyterFrontEnd,
@@ -40,16 +43,17 @@ export class TempNotebookManager {
     this.app = app;
     this.docManager = docManager;
     this.collapsedManager = collapsedManager;
+    this.alternativeManager = new AlternativeManager(() => {});
   }
 
   /**
    * Open a new notebook with the collapsed cells for editing
    */
-  public openTempNotebook(
+  public async openTempNotebook(
     sourceCell: ICellModel,
     collapsedMetadata: CollapsedMetadata,
     sourceNotebook: NotebookPanel
-  ): NotebookPanel | null {
+  ): Promise<{ panel: NotebookPanel; name: string } | null> {
     console.log('Opening temp notebook with collapsed data:', {
       cellId: sourceCell.id,
       storedNodesCount: collapsedMetadata.storedNodes.length,
@@ -67,6 +71,24 @@ export class TempNotebookManager {
       return null;
     }
 
+    // Check if there's a saved notebook name in the metadata
+    let notebookName = collapsedMetadata.notebookName;
+    console.log('Notebook name:', notebookName);
+    let notebookExists = false;
+
+    if (notebookName) {
+      // Check if the notebook file exists
+      try {
+        await this.docManager.services.contents.get(notebookName);
+        notebookExists = true;
+        console.log(`Found existing notebook: ${notebookName}`);
+      } catch (error) {
+        console.log(
+          `Notebook ${notebookName} not found, will create a new one`
+        );
+      }
+    }
+
     // Create a temporary notebook model from the collapsed cells
     const tempModel = storedNodesToNotebookModel(collapsedMetadata.storedNodes);
     if (!tempModel) {
@@ -79,12 +101,50 @@ export class TempNotebookManager {
       tempModel.cells.length
     );
 
-    // Generate a unique path for the temp notebook
-    const tempPath = `temp-notebook-${UUID.uuid4()}.ipynb`;
+    // If we don't have a notebook name or it doesn't exist, ask the user
+    if (!notebookExists || !notebookName) {
+      console.log("No notebook name or it doesn't exist");
+      // Create a proper input widget for the dialog
+      const input = document.createElement('input');
+      input.placeholder = 'Enter notebook name';
+      input.classList.add('jp-mod-styled');
+      if (notebookName) {
+        // Pre-fill with the previous name if it exists
+        input.value = notebookName.replace('.ipynb', '');
+      }
+      const body = new Widget({ node: input });
+      console.log('Showing dialog');
+
+      // Ask the user for a notebook name
+      const result = await showDialog({
+        title: notebookName
+          ? 'Notebook Not Found - Create New?'
+          : 'Name Your Temporary Notebook',
+        body: body,
+        buttons: [Dialog.cancelButton(), Dialog.okButton()]
+      });
+      console.log('Dialog result:', result);
+
+      if (!result.button.accept) {
+        console.log('User cancelled notebook creation');
+        return null; // User cancelled
+      }
+
+      // Use the input value directly from the input element
+      notebookName = input.value
+        ? `${input.value}.ipynb`
+        : `temp-notebook-${UUID.uuid4()}.ipynb`;
+    }
+    console.log('Notebook name:', notebookName);
+
+    // Update the collapsed metadata with the notebook name
+    collapsedMetadata.notebookName = notebookName;
+    console.log('Setting collapsed metadata with notebook name:', notebookName);
+    this.collapsedManager.setCollapsedMetadata(sourceCell, collapsedMetadata);
 
     // Create and open the temp notebook
     const tempNotebook = this.docManager.createNew(
-      tempPath,
+      notebookName,
       'notebook',
       sourceNotebook.sessionContext.kernelPreference
     ) as NotebookPanel;
@@ -93,15 +153,15 @@ export class TempNotebookManager {
     tempNotebook.context.model.fromJSON(tempModel.toJSON());
 
     // Store information about this temp notebook
-    this.tempNotebooks.set(tempPath, {
+    this.tempNotebooks.set(notebookName, {
       sourceCell,
       sourceNotebook,
       tempNotebook,
-      tempNotebookPath: tempPath
+      tempNotebookPath: notebookName
     });
 
     // Set up event listeners for saving/closing
-    this.setupEventListeners(tempPath);
+    this.setupEventListeners(notebookName);
 
     // Set notebook title to indicate it's a temporary view
     tempNotebook.title.label = `Collapsed View: ${sourceNotebook.title.label}`;
@@ -109,7 +169,7 @@ export class TempNotebookManager {
     // Open the notebook in the main area
     this.app.shell.add(tempNotebook, 'main');
 
-    return tempNotebook;
+    return { panel: tempNotebook, name: notebookName };
   }
 
   /**
@@ -135,10 +195,22 @@ export class TempNotebookManager {
       }
     }
 
-    this.collapsedManager.setCollapsedMetadata(sourceCell, { storedNodes });
+    // Save the collapsed metadata
+    this.collapsedManager.setCollapsedMetadata(sourceCell, {
+      storedNodes,
+      notebookName: tempNotebookPath
+    });
+
+    // Update the source cell with the combined source
     this.collapsedManager.updateCellSource(sourceCell);
 
-    console.log('Saved changes from temp notebook to original cell');
+    // Also update the active alternative with the combined source
+    const combinedSource = sourceCell.sharedModel.getSource();
+    this.alternativeManager.updateCurrentVersion(sourceCell, combinedSource);
+
+    console.log(
+      'Saved changes from temp notebook to original cell and updated alternatives'
+    );
 
     // Emit the change signal to update the graph
     this.tempNotebookChanged.emit(tempNotebookPath);
@@ -269,19 +341,19 @@ export class TempNotebookManager {
   /**
    * Get the source information for a temporary notebook
    */
-  public getSourceInfo(tempNotebookPath: string): TempNotebookInfo | undefined {
+  public getSourceInfo(tempNotebookPath: string): NotebookInfo | undefined {
     return this.tempNotebooks.get(tempNotebookPath);
   }
 
   /**
    * Open a new notebook from a stored node
    */
-  public openTempNotebookFromStoredNode(
+  public async openTempNotebookFromStoredNode(
     storedNode: StoredNode,
     collapsedMetadata: CollapsedMetadata,
     sourceNotebook: NotebookPanel,
     parentCell: ICellModel
-  ): NotebookPanel | null {
+  ): Promise<{ panel: NotebookPanel; name: string } | null> {
     console.log('Opening temp notebook from stored node:', {
       cellId: storedNode.cellId,
       storedNodesCount: collapsedMetadata.storedNodes.length
@@ -294,12 +366,31 @@ export class TempNotebookManager {
       return null;
     }
 
-    // Generate a unique path for the temp notebook
-    const tempPath = `temp-notebook-${UUID.uuid4()}.ipynb`;
+    // Create a proper input widget for the dialog
+    const input = document.createElement('input');
+    input.placeholder = 'Enter notebook name';
+    input.classList.add('jp-mod-styled');
+    const body = new Widget({ node: input });
+
+    // Ask the user for a notebook name
+    const result = await showDialog({
+      title: 'Name Your Nested Notebook',
+      body: body,
+      buttons: [Dialog.cancelButton(), Dialog.okButton()]
+    });
+
+    if (!result.button.accept) {
+      return null; // User cancelled
+    }
+
+    // Use the input value directly from the input element
+    const notebookName = input.value
+      ? `${input.value}.ipynb`
+      : `nested-notebook-${UUID.uuid4()}.ipynb`;
 
     // Create and open the temp notebook
     const tempNotebook = this.docManager.createNew(
-      tempPath,
+      notebookName,
       'notebook',
       sourceNotebook.sessionContext.kernelPreference
     ) as NotebookPanel;
@@ -308,15 +399,15 @@ export class TempNotebookManager {
     tempNotebook.context.model.fromJSON(tempModel.toJSON());
 
     // Store information about this temp notebook
-    this.tempNotebooks.set(tempPath, {
+    this.tempNotebooks.set(notebookName, {
       sourceCell: parentCell, // Use the parent cell for saving changes back
       sourceNotebook,
       tempNotebook,
-      tempNotebookPath: tempPath
+      tempNotebookPath: notebookName
     });
 
     // Set up event listeners for saving/closing
-    this.setupEventListeners(tempPath);
+    this.setupEventListeners(notebookName);
 
     // Set notebook title to indicate it's a temporary view
     tempNotebook.title.label = `Nested View: ${sourceNotebook.title.label}`;
@@ -324,6 +415,6 @@ export class TempNotebookManager {
     // Open the notebook in the main area
     this.app.shell.add(tempNotebook, 'main');
 
-    return tempNotebook;
+    return { panel: tempNotebook, name: notebookName };
   }
 }

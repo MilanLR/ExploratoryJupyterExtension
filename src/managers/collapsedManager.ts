@@ -10,6 +10,7 @@ export interface StoredNode {
 
 export interface CollapsedMetadata {
   storedNodes: StoredNode[];
+  notebookName?: string;
 }
 
 export class CollapsedManager {
@@ -40,6 +41,7 @@ export class CollapsedManager {
     cell: ICellModel,
     metadata: CollapsedMetadata
   ): void {
+    console.log('Setting collapsed metadata:', metadata);
     cell.sharedModel.setMetadata('collapsed-data', JSON.stringify(metadata));
   }
 
