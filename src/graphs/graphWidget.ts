@@ -1,22 +1,21 @@
 import { Widget } from '@lumino/widgets';
 import { DataSet, Network, Options } from 'vis-network/standalone';
-import { INotebookModel, NotebookPanel } from '@jupyterlab/notebook';
+import { NotebookPanel } from '@jupyterlab/notebook';
 import {
   AlternativeManager,
-  CellAlternatives
+  ICellAlternatives
 } from '../managers/alternativeManager';
 import { CollapsedManager } from '../managers/collapsedManager';
 import { graphIcon } from '../icons';
-import { KernelManager, kernelManager } from '../managers/kernelManager';
+import { kernelManager } from '../managers/kernelManager';
 import { ICellModel } from '@jupyterlab/cells';
-import { CollapsedMetadata } from '../managers/collapsedManager';
-import { StoredNode } from '../managers/collapsedManager';
+import { ICollapsedMetadata } from '../managers/collapsedManager';
+import { IStoredNode } from '../managers/collapsedManager';
 import { NotebookManager } from '../managers/notebookManager';
-import { Signal } from '@lumino/signaling';
 
-interface ZoomState {
+interface IZoomState {
   node: ICellModel;
-  metadata: CollapsedMetadata;
+  metadata: ICollapsedMetadata;
   notebookPanel: NotebookPanel;
 }
 
@@ -30,7 +29,7 @@ export class GraphWidget extends Widget {
   private collapsedManager: CollapsedManager;
   private tempNotebookManager: NotebookManager;
   private contextMenu: HTMLDivElement;
-  private zoomStack: ZoomState[] = [];
+  private zoomStack: IZoomState[] = [];
   private zoomOutButton: HTMLButtonElement;
 
   // Graph layout constants
@@ -71,9 +70,13 @@ export class GraphWidget extends Widget {
         if (this.zoomStack.length > 0) {
           const parentZoom = this.zoomStack[this.zoomStack.length - 1];
           this.tempNotebookManager.setTempNotebookFront(parentZoom.node);
-          this.tempNotebookManager.closeNotebook(currentZoom?.notebookPanel!);
+          if (currentZoom?.notebookPanel) {
+            this.tempNotebookManager.closeNotebook(currentZoom.notebookPanel);
+          }
         } else {
-          this.tempNotebookManager.closeNotebook(currentZoom?.notebookPanel!);
+          if (currentZoom?.notebookPanel) {
+            this.tempNotebookManager.closeNotebook(currentZoom.notebookPanel);
+          }
         }
 
         this.updateGraphDisplay();
@@ -127,7 +130,7 @@ export class GraphWidget extends Widget {
         enabled: true,
         addNode: false,
         deleteNode: false,
-        addEdge: (edgeData: any, callback: Function) => {
+        addEdge: (edgeData: any, callback: (edgeData: any) => void) => {
           if (edgeData.from && edgeData.to) {
             callback(edgeData);
           }
@@ -156,7 +159,7 @@ export class GraphWidget extends Widget {
     // Add context menu event handler
     this.network.on('oncontext', properties => {
       properties.event.preventDefault();
-      const { pointer, nodes, edges } = properties;
+      const { pointer } = properties;
 
       // Clear previous menu
       this.contextMenu.innerHTML = '';
@@ -200,7 +203,7 @@ export class GraphWidget extends Widget {
             this.addSeparator();
 
             // If this node has alternatives and this isn't the active one
-            const alternativesMetadata: CellAlternatives = JSON.parse(
+            const alternativesMetadata: ICellAlternatives = JSON.parse(
               storedNode.alternativeMetadata || '[]'
             );
             if (
@@ -221,7 +224,7 @@ export class GraphWidget extends Widget {
             if (storedNode.nestedNodes && storedNode.nestedNodes.length > 0) {
               this.addMenuItem('Zoom In', async () => {
                 // Create a new zoom state for this nested node
-                const nestedMetadata: CollapsedMetadata = {
+                const nestedMetadata: ICollapsedMetadata = {
                   storedNodes: storedNode.nestedNodes ?? [],
                   notebookName: ''
                 };
@@ -237,7 +240,7 @@ export class GraphWidget extends Widget {
                 for (const tcell of notebookCells) {
                   console.log('cell.id:', tcell.id);
                   console.log('storedNode.cellId:', storedNode.cellId);
-                  if (tcell.id == storedNode.cellId) {
+                  if (tcell.id === storedNode.cellId) {
                     cell = tcell;
                     break;
                   }
@@ -261,7 +264,7 @@ export class GraphWidget extends Widget {
 
                 this.zoomStack.push({
                   node: currentZoom.node, // Keep the same parent node
-                  metadata: nestedMetadata as CollapsedMetadata,
+                  metadata: nestedMetadata as ICollapsedMetadata,
                   notebookPanel: notebookInfo.panel
                 });
 
@@ -304,9 +307,13 @@ export class GraphWidget extends Widget {
           const [cellIndexStr, , altIndexStr] = nodeId.split('-');
           const cellIndex = parseInt(cellIndexStr) - 1;
           const altIndex = parseInt(altIndexStr) - 1;
-          if (!this.currentNotebookPanel) return;
+          if (!this.currentNotebookPanel) {
+            return;
+          }
           const cell = this.currentNotebookPanel.model?.cells.get(cellIndex);
-          if (!cell) return;
+          if (!cell) {
+            return;
+          }
 
           // Add Execute option at the top of the menu
           this.addMenuItem('Execute', async () => {
@@ -410,10 +417,14 @@ export class GraphWidget extends Widget {
       const cellIndex = parseInt(cellIndexStr) - 1; // Subtract 1 since node IDs are 1-based
       const altIndex = parseInt(altIndexStr) - 1; // Subtract 1 since alt IDs are 1-based
 
-      if (!this.currentNotebookPanel) return;
+      if (!this.currentNotebookPanel) {
+        return;
+      }
 
       const cell = this.currentNotebookPanel.model?.cells.get(cellIndex);
-      if (!cell) return;
+      if (!cell) {
+        return;
+      }
 
       // Switch to the selected alternative
       this.alternativeManager.switchToAlternative(cell, altIndex);
@@ -468,7 +479,7 @@ export class GraphWidget extends Widget {
     }
   }
 
-  private displayStoredNodes(nodes: StoredNode[]): void {
+  private displayStoredNodes(nodes: IStoredNode[]): void {
     // Add START node
     this.nodes.add({
       id: 'START',
@@ -496,9 +507,9 @@ export class GraphWidget extends Widget {
     // Create nodes for each stored node
     nodes.forEach((node, index) => {
       // Check if the node has alternatives
-      const alternativesMetadata: CellAlternatives = JSON.parse(
+      const alternativesMetadata: ICellAlternatives = JSON.parse(
         node.alternativeMetadata || '[]'
-      ) as CellAlternatives;
+      ) as ICellAlternatives;
       const alternatives = alternativesMetadata.versions || [
         { source: node.source }
       ];
@@ -577,11 +588,9 @@ export class GraphWidget extends Widget {
     }
 
     // Check if this is a temp notebook and get its source info
-    let isTemp = false;
     let sourceInfo: any = null;
 
     if (this.tempNotebookManager.isTempNotebook(notebook)) {
-      isTemp = true;
       sourceInfo = this.tempNotebookManager.getSourceInfo(
         notebook.context.path
       );
@@ -762,7 +771,9 @@ export class GraphWidget extends Widget {
 
     // Get the source info for this temp notebook
     const sourceInfo = this.tempNotebookManager.getSourceInfo(tempNotebookPath);
-    if (!sourceInfo) return;
+    if (!sourceInfo) {
+      return;
+    }
 
     // If we're zoomed in, update the zoom stack with fresh metadata
     if (this.zoomStack.length > 0) {

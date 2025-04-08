@@ -1,9 +1,8 @@
 import { Kernel, KernelMessage } from '@jupyterlab/services';
 import { Signal } from '@lumino/signaling';
-import { ICellModel, ICodeCellModel } from '@jupyterlab/cells';
+import { ICellModel } from '@jupyterlab/cells';
 import { AlternativeManager } from './alternativeManager';
 import { clearOutputs, setExecutionCount } from '../cellUtils';
-import { IOutput } from '@jupyterlab/nbformat';
 
 export class KernelManager {
   private kernel: Kernel.IKernelConnection | null = null;
@@ -88,10 +87,14 @@ export class KernelManager {
       >
     | undefined
   > {
-    if (!this.kernel) return;
-    if (cell.type !== 'code') return;
+    if (!this.kernel) {
+      return;
+    }
+    if (cell.type !== 'code') {
+      return;
+    }
     if (!('outputs' in cell)) {
-      // @ts-ignore
+      // @ts-expect-error ICellModel.outputs does not have outputs
       cell.outputs = [];
     }
 
@@ -148,10 +151,14 @@ export class KernelManager {
       >
     | undefined
   > {
-    if (!this.kernel) return;
-    if (cell.type !== 'code') return;
+    if (!this.kernel) {
+      return;
+    }
+    if (cell.type !== 'code') {
+      return;
+    }
     if (!('outputs' in cell)) {
-      // @ts-ignore
+      // @ts-expect-error ICellModel.outputs does not have outputs
       cell.outputs = [];
     }
 

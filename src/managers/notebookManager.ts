@@ -5,8 +5,8 @@ import { UUID } from '@lumino/coreutils';
 import { ICellModel } from '@jupyterlab/cells';
 import {
   CollapsedManager,
-  CollapsedMetadata,
-  StoredNode
+  ICollapsedMetadata,
+  IStoredNode
 } from './collapsedManager';
 import {
   cellModelToStoredNode,
@@ -17,7 +17,7 @@ import { showDialog, Dialog } from '@jupyterlab/apputils';
 import { Widget } from '@lumino/widgets';
 import { AlternativeManager } from './alternativeManager';
 
-interface NotebookInfo {
+interface INotebookInfo {
   sourceCell: ICellModel;
   sourceNotebook: NotebookPanel;
   tempNotebook: NotebookPanel;
@@ -27,11 +27,11 @@ interface NotebookInfo {
 export class NotebookManager {
   private app: JupyterFrontEnd;
   private docManager: IDocumentManager;
-  private tempNotebooks: Map<string, NotebookInfo> = new Map();
+  private tempNotebooks: Map<string, INotebookInfo> = new Map();
   private collapsedManager: CollapsedManager;
   private alternativeManager: AlternativeManager;
   public tempNotebookChanged = new Signal<NotebookManager, string>(this);
-  public tempNotebookActivated = new Signal<NotebookManager, NotebookInfo>(
+  public tempNotebookActivated = new Signal<NotebookManager, INotebookInfo>(
     this
   );
 
@@ -51,7 +51,7 @@ export class NotebookManager {
    */
   public async openTempNotebook(
     sourceCell: ICellModel,
-    collapsedMetadata: CollapsedMetadata,
+    collapsedMetadata: ICollapsedMetadata,
     sourceNotebook: NotebookPanel
   ): Promise<{ panel: NotebookPanel; name: string } | null> {
     console.log('Opening temp notebook with collapsed data:', {
@@ -182,10 +182,10 @@ export class NotebookManager {
       return;
     }
 
-    const { sourceCell, tempNotebook, sourceNotebook } = info;
+    const { sourceCell, tempNotebook } = info;
 
     // Convert the temp notebook cells to StoredNode format
-    const storedNodes: StoredNode[] = [];
+    const storedNodes: IStoredNode[] = [];
     const cells = tempNotebook.content.model?.cells;
 
     if (cells) {
@@ -225,7 +225,9 @@ export class NotebookManager {
   ): void {
     const tempNotebookPath = notebook.context.path;
     const info = this.tempNotebooks.get(tempNotebookPath);
-    if (!info) return;
+    if (!info) {
+      return;
+    }
 
     if (saveChanges) {
       this.saveChanges(tempNotebookPath);
@@ -239,7 +241,7 @@ export class NotebookManager {
    * Close all temporary notebooks related to a source notebook
    */
   public closeAllForNotebook(sourceNotebook: NotebookPanel): void {
-    for (const [path, info] of this.tempNotebooks.entries()) {
+    for (const [, info] of this.tempNotebooks.entries()) {
       if (info.sourceNotebook === sourceNotebook) {
         this.closeNotebook(info.tempNotebook);
       }
@@ -251,9 +253,11 @@ export class NotebookManager {
    */
   private setupEventListeners(tempNotebookPath: string): void {
     const info = this.tempNotebooks.get(tempNotebookPath);
-    if (!info) return;
+    if (!info) {
+      return;
+    }
 
-    const { tempNotebook, sourceNotebook } = info;
+    const { tempNotebook } = info;
 
     // Save changes when the notebook is saved
     tempNotebook.context.saveState.connect((_, state) => {
@@ -297,7 +301,7 @@ export class NotebookManager {
     if (model) {
       // Listen for cell additions/removals
       model.contentChanged.connect((_, args) => {
-        console.log(`Cell change detected in temp notebook`);
+        console.log('Cell change detected in temp notebook');
         this.saveChanges(tempNotebookPath);
 
         // Emit a signal that the graph widget can listen to
@@ -341,7 +345,7 @@ export class NotebookManager {
   /**
    * Get the source information for a temporary notebook
    */
-  public getSourceInfo(tempNotebookPath: string): NotebookInfo | undefined {
+  public getSourceInfo(tempNotebookPath: string): INotebookInfo | undefined {
     return this.tempNotebooks.get(tempNotebookPath);
   }
 
@@ -349,8 +353,8 @@ export class NotebookManager {
    * Open a new notebook from a stored node
    */
   public async openTempNotebookFromStoredNode(
-    storedNode: StoredNode,
-    collapsedMetadata: CollapsedMetadata,
+    storedNode: IStoredNode,
+    collapsedMetadata: ICollapsedMetadata,
     sourceNotebook: NotebookPanel,
     parentCell: ICellModel
   ): Promise<{ panel: NotebookPanel; name: string } | null> {

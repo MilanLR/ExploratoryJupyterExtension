@@ -20,10 +20,6 @@
     "strictNullChecks": true,
     "target": "ES2018"
   },
-  "exclude": [
-    "node_modules"
-  ],
-  "include": [
-    "src/**/*.ts"
-  ]
+  "exclude": ["node_modules"],
+  "include": ["src/**/*.ts"]
 }

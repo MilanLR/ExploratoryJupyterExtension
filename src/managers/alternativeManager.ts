@@ -1,12 +1,12 @@
 import { ICellModel } from '@jupyterlab/cells';
 import { setExecutionCount } from '../cellUtils';
 
-interface AlternativeVersion {
+interface IAlternativeVersion {
   source: string;
 }
 
-export interface CellAlternatives {
-  versions: AlternativeVersion[];
+export interface ICellAlternatives {
+  versions: IAlternativeVersion[];
   activeIndex: number;
 }
 
@@ -22,7 +22,7 @@ export class AlternativeManager {
    * @param cell The cell model to get metadata from
    * @returns The cell's alternatives data, including versions and active index
    */
-  private getCellMetadata(cell: ICellModel): CellAlternatives {
+  private getCellMetadata(cell: ICellModel): ICellAlternatives {
     const loadedMetadata = cell.sharedModel.getMetadata('alternatives-data');
     if (loadedMetadata === undefined) {
       return {
@@ -31,7 +31,7 @@ export class AlternativeManager {
       };
     }
     const parsedMetadata = JSON.parse(loadedMetadata as string);
-    return parsedMetadata as CellAlternatives;
+    return parsedMetadata as ICellAlternatives;
   }
 
   /**
@@ -39,7 +39,7 @@ export class AlternativeManager {
    * @param cell The cell model to set metadata on
    * @param data The alternatives data to store
    */
-  private setCellMetadata(cell: ICellModel, data: CellAlternatives) {
+  private setCellMetadata(cell: ICellModel, data: ICellAlternatives) {
     cell.sharedModel.setMetadata('alternatives-data', JSON.stringify(data));
   }
 
@@ -72,7 +72,7 @@ export class AlternativeManager {
     }
 
     const currentIndex = cellData.activeIndex;
-    let newIndex =
+    const newIndex =
       direction === 'left'
         ? (currentIndex - 1 + cellData.versions.length) %
           cellData.versions.length
@@ -131,7 +131,7 @@ export class AlternativeManager {
   /**
    * Get all alternatives for a cell
    */
-  getAlternatives(cell: ICellModel): AlternativeVersion[] {
+  getAlternatives(cell: ICellModel): IAlternativeVersion[] {
     const cellData = this.getCellMetadata(cell);
     return cellData.versions;
   }

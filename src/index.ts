@@ -167,7 +167,9 @@ print("Cell states:", _cell_states)`,
       caption: 'Add alternative version',
       execute: () => {
         const cell = tracker.activeCell;
-        if (!cell) return;
+        if (!cell) {
+          return;
+        }
 
         const source = cell.model.sharedModel.getSource();
 
@@ -180,7 +182,9 @@ print("Cell states:", _cell_states)`,
       icon: caretLeftIcon,
       caption: () => {
         const cell = tracker.activeCell;
-        if (!cell) return 'Move alternative version left';
+        if (!cell) {
+          return 'Move alternative version left';
+        }
         const versions = alternativeManager.getAlternatives(cell.model);
         const currentIndex = alternativeManager.getActiveIndex(cell.model);
         return versions.length > 1
@@ -189,14 +193,18 @@ print("Cell states:", _cell_states)`,
       },
       execute: () => {
         const cell = tracker.activeCell;
-        if (!cell) return;
+        if (!cell) {
+          return;
+        }
 
         alternativeManager.moveAlternative('left', cell.model);
       },
       isVisible: () => tracker.activeCell?.model.type === 'code',
       isEnabled: () => {
         const cell = tracker.activeCell;
-        if (!cell) return false;
+        if (!cell) {
+          return false;
+        }
         const versions = alternativeManager.getAlternatives(cell.model);
         const currentIndex = alternativeManager.getActiveIndex(cell.model);
         return versions.length > 1 && currentIndex > 0;
@@ -207,7 +215,9 @@ print("Cell states:", _cell_states)`,
       icon: caretRightIcon,
       caption: () => {
         const cell = tracker.activeCell;
-        if (!cell) return 'Move alternative version right';
+        if (!cell) {
+          return 'Move alternative version right';
+        }
         const versions = alternativeManager.getAlternatives(cell.model);
         const currentIndex = alternativeManager.getActiveIndex(cell.model);
         return versions.length > 1
@@ -216,14 +226,18 @@ print("Cell states:", _cell_states)`,
       },
       execute: () => {
         const cell = tracker.activeCell;
-        if (!cell) return;
+        if (!cell) {
+          return;
+        }
 
         alternativeManager.moveAlternative('right', cell.model);
       },
       isVisible: () => tracker.activeCell?.model.type === 'code',
       isEnabled: () => {
         const cell = tracker.activeCell;
-        if (!cell) return false;
+        if (!cell) {
+          return false;
+        }
         const versions = alternativeManager.getAlternatives(cell.model);
         const currentIndex = alternativeManager.getActiveIndex(cell.model);
         return versions.length > 1 && currentIndex < versions.length - 1;
@@ -234,7 +248,9 @@ print("Cell states:", _cell_states)`,
       icon: deleteIcon,
       caption: () => {
         const cell = tracker.activeCell;
-        if (!cell) return 'Delete alternative version';
+        if (!cell) {
+          return 'Delete alternative version';
+        }
         const versions = alternativeManager.getAlternatives(cell.model);
         const currentIndex = alternativeManager.getActiveIndex(cell.model);
         return versions.length > 1
@@ -243,14 +259,18 @@ print("Cell states:", _cell_states)`,
       },
       execute: () => {
         const cell = tracker.activeCell;
-        if (!cell) return;
+        if (!cell) {
+          return;
+        }
 
         alternativeManager.deleteAlternative(cell.model);
       },
       isVisible: () => tracker.activeCell?.model.type === 'code',
       isEnabled: () => {
         const cell = tracker.activeCell;
-        if (!cell) return false;
+        if (!cell) {
+          return false;
+        }
         const versions = alternativeManager.getAlternatives(cell.model);
         return versions.length > 1;
       }

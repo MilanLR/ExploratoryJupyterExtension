@@ -1,15 +1,15 @@
 import { NotebookPanel } from '@jupyterlab/notebook';
 import { ICellModel } from '@jupyterlab/cells';
 
-export interface StoredNode {
+export interface IStoredNode {
   cellId: string;
   source: string;
   alternativeMetadata?: string;
-  nestedNodes?: StoredNode[];
+  nestedNodes?: IStoredNode[];
 }
 
-export interface CollapsedMetadata {
-  storedNodes: StoredNode[];
+export interface ICollapsedMetadata {
+  storedNodes: IStoredNode[];
   notebookName?: string;
 }
 
@@ -23,7 +23,9 @@ export class CollapsedManager {
   /**
    * Get the metadata for a collapsed cell
    */
-  public getCollapsedMetadata(cell: ICellModel): CollapsedMetadata | undefined {
+  public getCollapsedMetadata(
+    cell: ICellModel
+  ): ICollapsedMetadata | undefined {
     const loadedMetadata = cell.sharedModel.getMetadata('collapsed-data');
     if (loadedMetadata === undefined) {
       return {
@@ -31,7 +33,7 @@ export class CollapsedManager {
       };
     }
     const parsedMetadata = JSON.parse(loadedMetadata as string);
-    return parsedMetadata as CollapsedMetadata;
+    return parsedMetadata as ICollapsedMetadata;
   }
 
   /**
@@ -39,7 +41,7 @@ export class CollapsedManager {
    */
   public setCollapsedMetadata(
     cell: ICellModel,
-    metadata: CollapsedMetadata
+    metadata: ICollapsedMetadata
   ): void {
     console.log('Setting collapsed metadata:', metadata);
     cell.sharedModel.setMetadata('collapsed-data', JSON.stringify(metadata));
@@ -52,7 +54,7 @@ export class CollapsedManager {
     }
 
     // Recursively get all source code from stored nodes
-    const getAllSources = (nodes: StoredNode[]): string[] => {
+    const getAllSources = (nodes: IStoredNode[]): string[] => {
       const sources: string[] = [];
       for (const node of nodes) {
         sources.push(node.source);
@@ -112,7 +114,7 @@ export class CollapsedManager {
     }
 
     // Create list of nested nodes with their metadata
-    const storedNodes: StoredNode[] = codeCells.map(cell => {
+    const storedNodes: IStoredNode[] = codeCells.map(cell => {
       // Get alternatives metadata if it exists
       const alternativesMetadata =
         cell.sharedModel.getMetadata('alternatives-data');
@@ -285,7 +287,7 @@ export class CollapsedManager {
     }
 
     // Function to recursively find the node and replace it with its nested nodes
-    const findAndReplaceNode = (nodes: StoredNode[]): boolean => {
+    const findAndReplaceNode = (nodes: IStoredNode[]): boolean => {
       // Check if the node is directly in this array
       const directIndex = nodes.findIndex(
         node => node.cellId === cellIdToExpand

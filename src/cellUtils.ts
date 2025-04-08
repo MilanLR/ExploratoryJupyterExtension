@@ -1,6 +1,6 @@
 import { ICellModel } from '@jupyterlab/cells';
 import { NotebookModel, INotebookModel } from '@jupyterlab/notebook';
-import { StoredNode } from './managers/collapsedManager';
+import { IStoredNode } from './managers/collapsedManager';
 
 export function setExecutionCount(cell: ICellModel, value: string) {
   if ('executionCount' in cell) {
@@ -17,7 +17,7 @@ export function clearOutputs(cell: ICellModel) {
 /**
  * Convert a cell model to a stored node format
  */
-export function cellModelToStoredNode(cell: ICellModel): StoredNode {
+export function cellModelToStoredNode(cell: ICellModel): IStoredNode {
   // Get alternatives metadata if it exists
   const alternativesMetadata =
     cell.sharedModel.getMetadata('alternatives-data');
@@ -25,7 +25,7 @@ export function cellModelToStoredNode(cell: ICellModel): StoredNode {
   // Get any existing collapsed metadata
   const collapsedMetadata = cell.sharedModel.getMetadata('collapsed-data');
 
-  let nestedNodes: StoredNode[] | undefined;
+  let nestedNodes: IStoredNode[] | undefined;
   if (collapsedMetadata) {
     try {
       const parsed = JSON.parse(collapsedMetadata as string);
@@ -49,7 +49,7 @@ export function cellModelToStoredNode(cell: ICellModel): StoredNode {
  * Convert stored nodes to a notebook model
  */
 export function storedNodesToNotebookModel(
-  nodes: StoredNode[]
+  nodes: IStoredNode[]
 ): INotebookModel {
   const model = new NotebookModel();
 
