@@ -628,6 +628,13 @@ export class GraphWidget extends Widget {
       console.error('No cells found');
       return;
     }
+    const codeCellList: ICellModel[] = [];
+    for (let i = 0; i < cells.length; i++) {
+      const cell = cells.get(i);
+      if (cell.type === 'code') {
+        codeCellList.push(cell);
+      }
+    }
 
     // Add START node
     this.nodes.add({
@@ -654,28 +661,21 @@ export class GraphWidget extends Widget {
     });
 
     // Find first code cell and its active alternative
-    for (let i = 0; i < cells.length; i++) {
-      const cell = cells.get(i);
-      if (cell.type === 'code') {
-        const activeIndex = this.alternativeManager.getActiveIndex(cell);
-        // Add edge from START to first active code cell
-        this.edges.add({
-          from: 'START',
-          to: `${i + 1}-alt-${activeIndex + 1}`,
-          width: 2
-        });
-        break;
-      }
+    for (let i = 0; i < codeCellList.length; i++) {
+      const cell = codeCellList[i];
+      const activeIndex = this.alternativeManager.getActiveIndex(cell);
+      // Add edge from START to first active code cell
+      this.edges.add({
+        from: 'START',
+        to: `${i + 1}-alt-${activeIndex + 1}`,
+        width: 2
+      });
+      break;
     }
 
     // Create a node for each cell
-    for (let i = 0; i < cells.length; i++) {
-      const cell = cells.get(i);
-
-      // Skip non-code cells
-      if (cell.type !== 'code') {
-        continue;
-      }
+    for (let i = 0; i < codeCellList.length; i++) {
+      const cell = codeCellList[i];
 
       // Check if cell has alternatives
       const alternatives = this.alternativeManager.getAlternatives(cell);
@@ -718,8 +718,8 @@ export class GraphWidget extends Widget {
 
         // Add edge to next cell's alternatives if not the last cell
         if (i < cells.length - 1 && altIndex === activeIndex) {
-          const nextCell = cells.get(i + 1);
-          if (nextCell && nextCell.type === 'code') {
+          const nextCell = codeCellList[i + 1];
+          if (nextCell) {
             const nextActiveIndex =
               this.alternativeManager.getActiveIndex(nextCell);
             this.edges.add({
@@ -733,18 +733,13 @@ export class GraphWidget extends Widget {
     }
 
     // Update status message
-    const codeCellCount = Array.from({ length: cells.length }).filter(
-      (_, i) => cells.get(i).type === 'code'
-    ).length;
+    const codeCellCount = codeCellList.length;
 
     // Count total alternatives
     let totalAlternatives = 0;
-    for (let i = 0; i < cells.length; i++) {
-      const cell = cells.get(i);
-      if (cell.type === 'code') {
-        const alternatives = this.alternativeManager.getAlternatives(cell);
-        totalAlternatives += alternatives.length;
-      }
+    for (const cell of codeCellList) {
+      const alternatives = this.alternativeManager.getAlternatives(cell);
+      totalAlternatives += alternatives.length;
     }
 
     this._content.innerHTML = `
