@@ -31,7 +31,7 @@ __pycache__/
 .Python
 build/
 develop-eggs/
-dist/
+# dist/
 downloads/
 eggs/
 .eggs/
@@ -125,7 +125,4 @@ dmypy.json
 .yarn/
 
 
-
-.virtual_documents/
-# Untitled*.ipynb
 *.ipynb
