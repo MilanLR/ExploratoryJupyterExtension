@@ -1,7 +1,5 @@
 # ExploratoryJupyterExtension
 
-[![Github Actions Status](https://github.com/MilanLR/ExploratoryJupyterExtension/workflows/Build/badge.svg)](https://github.com/MilanLR/ExploratoryJupyterExtension/actions/workflows/build.yml)
-
 A JupyterLab extension to give better support for exploratory programming.
 
 ## Requirements

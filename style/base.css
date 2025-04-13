@@ -76,41 +76,6 @@
   box-shadow: var(--jp-elevation-z4);
 }
 
-.jp-GraphWidget-playButton {
-  background-color: #4caf50;
-  color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
-  transition: background-color 0.3s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: absolute;
-  bottom: 10px;
-  left: 10px;
-  z-index: 1000;
-  display: none;
-}
-
-.jp-GraphWidget-playButton:hover {
-  background-color: #45a049;
-}
-
-.jp-GraphWidget-playButton .jp-Icon {
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  -webkit-mask-size: 16px;
-  mask-size: 16px;
-  background-color: white;
-  width: 16px;
-  height: 16px;
-  display: inline-block;
-  margin-right: 5px;
-}
-
 .jp-GraphWidget-menuSeparator {
   height: 1px;
   background-color: #ddd;
@@ -142,7 +107,7 @@
   background-color: white;
   border: 1px solid #ccc;
   padding: 5px;
-  box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.2);
+  box-shadow: 2px 2px 6px rgb(0 0 0 / 20%);
   border-radius: 4px;
 }
 
@@ -151,6 +116,7 @@
   cursor: pointer;
   border-radius: 2px;
 }
+
 .jp-GraphWidget-menuItem:hover {
   background-color: var(--jp-layout-color2);
 }
