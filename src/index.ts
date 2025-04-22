@@ -468,11 +468,7 @@ const activateGraph = function (
 
         // Initial check for open notebook
         const current = notebookTracker.currentWidget;
-        if (
-          current &&
-          current.content.model &&
-          !tempNotebookManager.isTempNotebook(current)
-        ) {
+        if (current && current.content.model) {
           console.log('Initial notebook loaded');
           graphWidget.updateNotebook(current);
         } else {
@@ -518,40 +514,33 @@ function setupNotebookListeners(
   notebookTracker: INotebookTracker,
   tempNotebookManager: NotebookManager
 ) {
+  let oldNotebook: NotebookPanel | null = null;
+  let contentChanged: () => void;
   // Listen for notebook changes
   notebookTracker.currentChanged.connect(() => {
     const current = notebookTracker.currentWidget;
 
-    if (
-      current &&
-      current.content.model &&
-      !tempNotebookManager.isTempNotebook(current)
-    ) {
+    if (current && current.content.model) {
       console.log('Switched to different notebook');
       widget.updateNotebook(current);
+      if (oldNotebook && oldNotebook !== current) {
+        oldNotebook.content.model?.contentChanged.disconnect(contentChanged);
+      }
 
-      // Listen for changes in the current notebook's content
-      current.content.model.contentChanged.connect(() => {
+      // Define the callback outside so the reference stays consistent
+      contentChanged = () => {
         console.log(
           'Notebook content changed - cells modified, added, or deleted'
         );
         widget.updateNotebook(current);
-      });
+      };
+
+      // Now connect the new notebook
+      current.content.model.contentChanged.connect(contentChanged);
+      oldNotebook = current;
     } else {
       console.log('No notebook open, clearing widget');
       widget.clearNotebook();
-    }
-  });
-  // Listen for active cell changes
-  notebookTracker.activeCellChanged.connect(() => {
-    const current = notebookTracker.currentWidget;
-    if (
-      current &&
-      current.content.model &&
-      !tempNotebookManager.isTempNotebook(current)
-    ) {
-      console.log('Active cell changed - cursor moved to different cell');
-      widget.updateNotebook(current);
     }
   });
 }

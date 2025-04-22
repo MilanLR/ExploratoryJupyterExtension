@@ -25,6 +25,7 @@ export class GraphWidget extends Widget {
   private edges: any;
   private _content: HTMLElement;
   private alternativeManager: AlternativeManager;
+  private parentNotebookPanel: NotebookPanel | null = null;
   private currentNotebookPanel: NotebookPanel | null = null;
   private collapsedManager: CollapsedManager;
   private tempNotebookManager: NotebookManager;
@@ -79,7 +80,9 @@ export class GraphWidget extends Widget {
           }
         }
 
-        this.updateGraphDisplay();
+        this.currentNotebookPanel =
+          currentZoom?.notebookPanel ?? this.parentNotebookPanel;
+        this.updateNotebookView();
       }
     };
     this.node.appendChild(this.zoomOutButton);
@@ -175,214 +178,108 @@ export class GraphWidget extends Widget {
       }
 
       if (clickedNodeId) {
-        // Node context menu
-        const nodeId = clickedNodeId;
+        // find cell in current notebook panel
+        console.log('clickedNodeId:', clickedNodeId);
+        const currentNotebookPanel =
+          this.zoomStack.length > 0
+            ? this.zoomStack[this.zoomStack.length - 1].notebookPanel
+            : this.parentNotebookPanel;
+        console.log('currentNotebookPanel:', currentNotebookPanel);
+        const notebookCells = currentNotebookPanel?.model?.cells;
+        console.log('notebookCells:', notebookCells);
+        const [cellIndexStr, , altIndexStr] = clickedNodeId.split('-');
+        console.log('cellIndexStr:', cellIndexStr, 'altIndexStr:', altIndexStr);
+        const cellIndex = parseInt(cellIndexStr) - 1; // Subtract 1 since node IDs are 1-based
+        const altIndex = parseInt(altIndexStr) - 1; // Subtract 1 since alt IDs are 1-based
+        console.log('cellIndex:', cellIndex, 'altIndex:', altIndex);
+        const cell = notebookCells?.get(cellIndex);
+        console.log('cell:', cell);
 
-        // Handle stored nodes (when zoomed in)
-        if (nodeId.startsWith('stored-')) {
-          const parts = nodeId.split('-');
-          const index = parseInt(parts[1]);
-          const isAlt = parts.length > 3 && parts[2] === 'alt';
-          const altIndex = isAlt ? parseInt(parts[3]) : 0;
+        if (!cell) {
+          console.error('Cell not found');
+          return;
+        }
 
-          if (this.zoomStack.length > 0) {
-            const currentZoom = this.zoomStack[this.zoomStack.length - 1];
-            const storedNode = currentZoom.metadata.storedNodes[index];
+        if (!this.parentNotebookPanel) {
+          console.error('No current notebook panel');
+          return;
+        }
 
-            // Add options for stored nodes
-            this.addMenuItem('Execute', async () => {
-              console.log('Run stored node clicked:', nodeId);
-              await kernelManager.executeNestedCell(
-                currentZoom.node,
-                storedNode.source,
-                this.zoomStack.length
-              );
-            });
+        // Add Execute option at the top of the menu
+        this.addMenuItem('Execute', async () => {
+          console.log('Execute clicked:', clickedNodeId);
+          await kernelManager.executeCell(cell, altIndex);
+        });
 
-            // Add separator after Execute option
-            this.addSeparator();
-
-            // If this node has alternatives and this isn't the active one
-            const alternativesMetadata: ICellAlternatives = JSON.parse(
-              storedNode.alternativeMetadata || '[]'
-            );
-            if (
-              alternativesMetadata.versions &&
-              alternativesMetadata.versions.length > 1
-            ) {
-              const activeIndex = alternativesMetadata.activeIndex || 0;
-              if (altIndex !== activeIndex) {
-                this.addMenuItem('Select Alternative', () => {
-                  // Update the active index
-                  alternativesMetadata.activeIndex = altIndex;
-                  this.updateGraphDisplay();
-                });
+        // Add separator
+        this.addSeparator();
+        console.log(
+          'this.collapsedManager.isCollapsed(cell):',
+          this.collapsedManager.isCollapsed(cell)
+        );
+        console.log('cell:', cell);
+        console.log(
+          'collapsed metadata:',
+          this.collapsedManager.getCollapsedMetadata(cell)
+        );
+        if (this.collapsedManager.isCollapsed(cell)) {
+          // Add Zoom option for collapsed nodes
+          this.addMenuItem('Zoom In', async () => {
+            const metadata = this.collapsedManager.getCollapsedMetadata(cell);
+            if (metadata) {
+              const notebookCells =
+                this.parentNotebookPanel?.model?.sharedModel.cells;
+              if (!notebookCells) {
+                console.error('No notebook cells found');
+                return;
               }
-            }
 
-            // Check if this stored node has nested nodes
-            if (storedNode.nestedNodes && storedNode.nestedNodes.length > 0) {
-              this.addMenuItem('Zoom In', async () => {
-                // Create a new zoom state for this nested node
-                const nestedMetadata: ICollapsedMetadata = {
-                  storedNodes: storedNode.nestedNodes ?? [],
-                  notebookName: ''
-                };
-
-                const notebookCells = currentZoom.notebookPanel.model?.cells;
-                console.log('notebookCells:', notebookCells);
-                console.log('storedNode:', storedNode);
-                if (!notebookCells) {
-                  console.error('No notebook cells found');
-                  return;
-                }
-                let cell: ICellModel | null = null;
-                for (const tcell of notebookCells) {
-                  console.log('cell.id:', tcell.id);
-                  console.log('storedNode.cellId:', storedNode.cellId);
-                  if (tcell.id === storedNode.cellId) {
-                    cell = tcell;
-                    break;
-                  }
-                }
-
-                if (!cell) {
-                  console.error('Cell not found');
-                  return;
-                }
-
-                const notebookInfo =
-                  await this.tempNotebookManager.openTempNotebook(
-                    cell,
-                    nestedMetadata,
-                    currentZoom.notebookPanel
-                  );
-                if (!notebookInfo) {
-                  console.error('Failed to open temp notebook');
-                  return;
-                }
-
-                this.zoomStack.push({
-                  node: currentZoom.node, // Keep the same parent node
-                  metadata: nestedMetadata as ICollapsedMetadata,
-                  notebookPanel: notebookInfo.panel
-                });
-
-                this.updateGraphDisplay();
-              });
-
-              // Add Expand option for nested nodes
-              this.addMenuItem('Expand', () => {
-                console.log('Expanding nested node:', storedNode.cellId);
-
-                // Call expandNestedNode on the parent cell
-                this.collapsedManager.expandNestedNode(
-                  currentZoom.node,
-                  storedNode.cellId
+              const notebookInfo =
+                await this.tempNotebookManager.openTempNotebook(
+                  cell,
+                  metadata,
+                  this.parentNotebookPanel!
                 );
 
-                // Force a complete view refresh
-                if (this.zoomStack.length > 0) {
-                  // Get the current zoom state to refresh its metadata
-                  const currentZoom = this.zoomStack[this.zoomStack.length - 1];
+              if (!notebookInfo) {
+                console.error('Failed to open temp notebook');
+                return;
+              }
 
-                  // Reload the metadata from the node (it might have changed)
-                  const updatedMetadata =
-                    this.collapsedManager.getCollapsedMetadata(
-                      currentZoom.node
-                    );
-                  if (updatedMetadata) {
-                    // Update our zoom stack with fresh metadata
-                    currentZoom.metadata = updatedMetadata;
-                  }
-                }
-
-                // Refresh the display with updated metadata
-                this.updateGraphDisplay();
+              this.zoomStack.push({
+                node: cell,
+                metadata: metadata,
+                notebookPanel: notebookInfo.panel
               });
+              this.currentNotebookPanel = notebookInfo.panel;
+              this.updateNotebookView();
             }
-          }
-        } else {
-          // Original node handling code
-          const [cellIndexStr, , altIndexStr] = nodeId.split('-');
-          const cellIndex = parseInt(cellIndexStr) - 1;
-          const altIndex = parseInt(altIndexStr) - 1;
-          if (!this.currentNotebookPanel) {
-            return;
-          }
-          const cell = this.currentNotebookPanel.model?.cells.get(cellIndex);
-          if (!cell) {
-            return;
-          }
-
-          // Add Execute option at the top of the menu
-          this.addMenuItem('Execute', async () => {
-            console.log('Execute clicked:', nodeId);
-            await kernelManager.executeCell(cell, altIndex);
           });
 
-          // Add separator
-          this.addSeparator();
-
-          if (this.collapsedManager.isCollapsed(cell)) {
-            // Add Zoom option for collapsed nodes
-            this.addMenuItem('Zoom In', async () => {
-              const metadata = this.collapsedManager.getCollapsedMetadata(cell);
-              if (metadata) {
-                const notebookCells =
-                  this.currentNotebookPanel?.model?.sharedModel.cells;
-                if (!notebookCells) {
-                  console.error('No notebook cells found');
-                  return;
-                }
-
-                const notebookInfo =
-                  await this.tempNotebookManager.openTempNotebook(
-                    cell,
-                    metadata,
-                    this.currentNotebookPanel!
-                  );
-
-                if (!notebookInfo) {
-                  console.error('Failed to open temp notebook');
-                  return;
-                }
-
-                this.zoomStack.push({
-                  node: cell,
-                  metadata: metadata,
-                  notebookPanel: notebookInfo.panel
-                });
-
-                this.updateGraphDisplay();
-              }
+          // Only show Expand option if we're at the root level
+          if (this.zoomStack.length === 0) {
+            this.addMenuItem('Expand', () => {
+              this.collapsedManager.expand(cell);
+              this.updateNotebookView();
             });
-
-            // Only show Expand option if we're at the root level
-            if (this.zoomStack.length === 0) {
-              this.addMenuItem('Expand', () => {
-                this.collapsedManager.expand(cell);
-                this.updateNotebook(this.currentNotebookPanel);
+          }
+        } else {
+          // Normal node menu
+          this.addMenuItem('Add Alternative', () => {
+            this.alternativeManager.addAlternative(
+              cell.sharedModel.getSource(),
+              cell
+            );
+            this.updateNotebookView();
+          });
+          if (altIndexStr) {
+            const altIndex = parseInt(altIndexStr) - 1;
+            const activeIndex = this.alternativeManager.getActiveIndex(cell);
+            if (altIndex !== activeIndex) {
+              this.addMenuItem('Select Alternative', () => {
+                this.alternativeManager.switchToAlternative(cell, altIndex);
+                this.updateNotebookView();
               });
-            }
-          } else {
-            // Normal node menu
-            this.addMenuItem('Add Alternative', () => {
-              this.alternativeManager.addAlternative(
-                cell.sharedModel.getSource(),
-                cell
-              );
-              this.updateNotebook(this.currentNotebookPanel);
-            });
-            if (altIndexStr) {
-              const altIndex = parseInt(altIndexStr) - 1;
-              const activeIndex = this.alternativeManager.getActiveIndex(cell);
-              if (altIndex !== activeIndex) {
-                this.addMenuItem('Select Alternative', () => {
-                  this.alternativeManager.switchToAlternative(cell, altIndex);
-                  this.updateNotebook(this.currentNotebookPanel);
-                });
-              }
             }
           }
         }
@@ -417,12 +314,16 @@ export class GraphWidget extends Widget {
       const cellIndex = parseInt(cellIndexStr) - 1; // Subtract 1 since node IDs are 1-based
       const altIndex = parseInt(altIndexStr) - 1; // Subtract 1 since alt IDs are 1-based
 
-      if (!this.currentNotebookPanel) {
+      if (!this.parentNotebookPanel) {
+        console.error('No current notebook panel');
         return;
       }
 
-      const cell = this.currentNotebookPanel.model?.cells.get(cellIndex);
+      const cell = this.parentNotebookPanel.model?.cells.get(cellIndex);
       if (!cell) {
+        console.error('No cell found');
+        console.log('cellIndex:', cellIndex);
+        console.log('this.currentNotebookPanel:', this.parentNotebookPanel);
         return;
       }
 
@@ -457,166 +358,70 @@ export class GraphWidget extends Widget {
     this.contextMenu.appendChild(separator);
   }
 
-  private updateGraphDisplay(): void {
-    // Update zoom out button visibility using the class property
-    this.zoomOutButton.style.display =
-      this.zoomStack.length > 0 ? 'inline-block' : 'none';
-
-    // Clear existing nodes
-    this.nodes.clear();
-    this.edges.clear();
-
-    if (this.zoomStack.length > 0) {
-      // We're zoomed into a collapsed node
-      const currentZoom = this.zoomStack[this.zoomStack.length - 1];
-      const storedNodes = currentZoom.metadata.storedNodes;
-
-      // Display the stored nodes
-      this.displayStoredNodes(storedNodes);
-    } else {
-      // Normal notebook view
-      this.updateNotebook(this.currentNotebookPanel);
-    }
-  }
-
-  private displayStoredNodes(nodes: IStoredNode[]): void {
-    // Add START node
-    this.nodes.add({
-      id: 'START',
-      label: 'START',
-      shape: 'box',
-      borderRadius: 8,
-      x: this.xOffset,
-      y: this.yOffset - this.ySpacing,
-      color: '#ffd700',
-      borderWidth: 2,
-      font: {
-        size: 24,
-        bold: true
-      },
-      widthConstraint: {
-        minimum: 135,
-        maximum: 135
-      },
-      heightConstraint: {
-        minimum: 50,
-        maximum: 50
-      }
-    });
-
-    // Create nodes for each stored node
-    nodes.forEach((node, index) => {
-      // Check if the node has alternatives
-      const alternativesMetadata: ICellAlternatives = JSON.parse(
-        node.alternativeMetadata || '[]'
-      ) as ICellAlternatives;
-      const alternatives = alternativesMetadata.versions || [
-        { source: node.source }
-      ];
-      const activeIndex = alternativesMetadata.activeIndex || 0;
-
-      // Calculate x positions to center alternatives
-      const totalWidth = (alternatives.length - 1) * this.xSpacing;
-      const startX = this.xOffset - totalWidth / 2;
-
-      // Create nodes for each alternative
-      alternatives.forEach((alt, altIndex) => {
-        const lines = (alt.source as string)
-          .split('\n')
-          .filter(line => line.trim());
-        const firstTwoLines = lines.slice(0, 2).map(line => {
-          const trimmed = line.trim().slice(0, 11);
-          return trimmed + (line.length > 11 ? '...' : '');
-        });
-
-        const hasNestedNodes = node.nestedNodes && node.nestedNodes.length > 0;
-
-        const nodeId = `stored-${index}-alt-${altIndex}`;
-
-        this.nodes.add({
-          id: nodeId,
-          label: firstTwoLines.join('\n') || '(empty)',
-          shape: 'box',
-          borderRadius: 8,
-          x: startX + altIndex * this.xSpacing,
-          y: this.yOffset + index * this.ySpacing,
-          color: hasNestedNodes ? '#808080' : '#8dd3c7',
-          borderWidth: altIndex === activeIndex ? 3 : 1,
-          widthConstraint: {
-            minimum: 135,
-            maximum: 135
-          },
-          heightConstraint: {
-            minimum: 50,
-            maximum: 50
-          }
-        });
-
-        // Add edge from previous node or START
-        if (index === 0 && altIndex === activeIndex) {
-          this.edges.add({
-            from: 'START',
-            to: nodeId,
-            width: 2
-          });
-        } else if (index > 0 && altIndex === activeIndex) {
-          // Connect to the active alternative of the previous node
-          const prevNodeId = `stored-${index - 1}-alt-${JSON.parse(nodes[index - 1].alternativeMetadata || '[]').activeIndex || 0}`;
-          this.edges.add({
-            from: prevNodeId,
-            to: nodeId,
-            width: 2
-          });
-        }
-      });
-    });
-
-    // Update status message
-    this._content.innerHTML = `
-      <div style="text-align: center; padding: 10px; background-color: var(--jp-layout-color1); border-radius: 4px;">
-        Viewing ${nodes.length} collapsed cells
-      </div>
-    `;
-  }
-
   updateNotebook(notebook: NotebookPanel | null): void {
-    this.currentNotebookPanel = notebook;
+    console.log('updateNotebook', notebook?.context.path);
 
     if (!notebook) {
       this.clearNotebook();
       return;
     }
 
-    // Check if this is a temp notebook and get its source info
-    let sourceInfo: any = null;
+    // if (this.parentNotebookPanel === notebook) {
+    //   return;
+    // }
 
-    if (this.tempNotebookManager.isTempNotebook(notebook)) {
-      sourceInfo = this.tempNotebookManager.getSourceInfo(
-        notebook.context.path
-      );
+    // Check if this notebook is in the zoom stack
+    const zoomIndex = this.zoomStack.findIndex(
+      zoomState => zoomState.notebookPanel === notebook
+    );
 
-      // If we have source info, use the source notebook for our display
-      if (sourceInfo) {
-        // We'll still display the zoomed view, but make sure we have the latest data
-        // Update the zoom stack with fresh metadata if needed
-        if (this.zoomStack.length > 0) {
-          const currentZoom = this.zoomStack[this.zoomStack.length - 1];
-          // Refresh metadata from the source cell
-          const updatedMetadata = this.collapsedManager.getCollapsedMetadata(
-            sourceInfo.sourceCell
-          );
-          if (updatedMetadata) {
-            currentZoom.metadata = updatedMetadata;
-          }
-        }
-      }
+    if (zoomIndex >= 0) {
+      // This notebook is in the zoom stack, set current to this notebook
+      // but keep parent as is
+      this.currentNotebookPanel = notebook;
+      this.zoomStack = this.zoomStack.slice(0, zoomIndex + 1);
+    } else {
+      // This is a new notebook, set both parent and current
+      this.parentNotebookPanel = notebook;
+      this.currentNotebookPanel = notebook;
+      // Clear zoom stack when switching to a new parent notebook
+      this.zoomStack = [];
     }
 
-    // If we're zoomed in, maintain the zoomed view
-    if (this.zoomStack.length > 0) {
-      this.updateGraphDisplay();
+    this.updateNotebookView();
+  }
+
+  updateNotebookView(): void {
+    console.log('updateNotebookView');
+    const notebook = this.currentNotebookPanel;
+    if (!notebook) {
       return;
     }
+
+    // // Check if this is a temp notebook and get its source info
+    // let sourceInfo: any = null;
+
+    // if (this.tempNotebookManager.isTempNotebook(notebook)) {
+    //   sourceInfo = this.tempNotebookManager.getSourceInfo(
+    //     notebook.context.path
+    //   );
+
+    //   // If we have source info, use the source notebook for our display
+    //   if (sourceInfo) {
+    //     // We'll still display the zoomed view, but make sure we have the latest data
+    //     // Update the zoom stack with fresh metadata if needed
+    //     if (this.zoomStack.length > 0) {
+    //       const currentZoom = this.zoomStack[this.zoomStack.length - 1];
+    //       // Refresh metadata from the source cell
+    //       const updatedMetadata = this.collapsedManager.getCollapsedMetadata(
+    //         sourceInfo.sourceCell
+    //       );
+    //       if (updatedMetadata) {
+    //         currentZoom.metadata = updatedMetadata;
+    //       }
+    //     }
+    //   }
+    // }
 
     // Clear existing nodes
     this.nodes.clear();
@@ -752,6 +557,8 @@ export class GraphWidget extends Widget {
         Viewing ${codeCellCount} code cells (${totalAlternatives} alternatives)
       </div>
     `;
+
+    this.updateZoomOutButtonVisibility();
   }
 
   clearNotebook(): void {
@@ -759,11 +566,17 @@ export class GraphWidget extends Widget {
       '<div style="text-align: center;">Please open a notebook to start using this extension</div>';
   }
 
+  private lock = false;
   // Add a method to handle temp notebook changes
   private _onTempNotebookChanged = (
     sender: NotebookManager,
     tempNotebookPath: string
   ): void => {
+    if (this.lock) {
+      return;
+    }
+    this.lock = true;
+
     console.log(
       'Graph widget notified of temp notebook change:',
       tempNotebookPath
@@ -775,23 +588,39 @@ export class GraphWidget extends Widget {
       return;
     }
 
-    // If we're zoomed in, update the zoom stack with fresh metadata
-    if (this.zoomStack.length > 0) {
-      const currentZoom = this.zoomStack[this.zoomStack.length - 1];
+    // Check if the temp notebook is in the zoom stack
+    const tempNotebookIndex = this.zoomStack.findIndex(
+      zoomState => zoomState.notebookPanel === sourceInfo.tempNotebook
+    );
 
-      // Refresh metadata from the source cell
-      const updatedMetadata = this.collapsedManager.getCollapsedMetadata(
+    if (tempNotebookIndex >= 0) {
+      console.log(
+        'Temp notebook already in zoom stack at index:',
+        tempNotebookIndex
+      );
+      // If it's already in the zoom stack, we don't need to add it again
+      return;
+    }
+
+    // If not in zoom stack and we have source info, add it to the zoom stack
+    if (sourceInfo.sourceCell && sourceInfo.tempNotebook) {
+      const metadata = this.collapsedManager.getCollapsedMetadata(
         sourceInfo.sourceCell
       );
 
-      if (updatedMetadata) {
-        // Update our zoom stack with fresh metadata
-        currentZoom.metadata = updatedMetadata;
+      if (metadata) {
+        this.zoomStack.push({
+          node: sourceInfo.sourceCell,
+          metadata: metadata,
+          notebookPanel: sourceInfo.tempNotebook
+        });
 
-        // Refresh the display with updated metadata
-        this.updateGraphDisplay();
+        this.currentNotebookPanel = sourceInfo.tempNotebook;
+        this.updateNotebookView();
+        console.log('Added temp notebook to zoom stack:', tempNotebookPath);
       }
     }
+    this.lock = false;
   };
 
   // Add a method to handle temp notebook activation
@@ -815,7 +644,9 @@ export class GraphWidget extends Widget {
       if (existingZoomIndex < this.zoomStack.length - 1) {
         // Remove all zoom states above this one
         this.zoomStack.splice(existingZoomIndex + 1);
-        this.updateGraphDisplay();
+        this.currentNotebookPanel =
+          this.zoomStack[this.zoomStack.length - 1].notebookPanel;
+        this.updateNotebookView();
       }
       return;
     }
@@ -830,7 +661,8 @@ export class GraphWidget extends Widget {
         metadata: metadata,
         notebookPanel: info.tempNotebook
       });
-      this.updateGraphDisplay();
+      this.currentNotebookPanel = info.tempNotebook;
+      this.updateNotebookView();
     }
   };
 
@@ -858,7 +690,13 @@ export class GraphWidget extends Widget {
         notebookPanel: notebookInfo.panel
       });
 
-      this.updateGraphDisplay();
+      this.currentNotebookPanel = notebookInfo.panel;
+      this.updateNotebookView();
     }
+  }
+
+  private updateZoomOutButtonVisibility(): void {
+    this.zoomOutButton.style.display =
+      this.zoomStack.length > 0 ? 'block' : 'none';
   }
 }

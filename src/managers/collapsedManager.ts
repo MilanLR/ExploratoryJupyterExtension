@@ -159,6 +159,7 @@ export class CollapsedManager {
         activeIndex: 0
       })
     );
+    activeCell.sharedModel.setMetadata('readOnly', true);
 
     console.log('Updated active cell source:', {
       originalLength: originalSource.length,
