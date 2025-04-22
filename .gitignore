@@ -126,3 +126,6 @@ dmypy.json
 
 
 *.ipynb
+
+.virtual_documents/
+Untitled*.ipynb
