@@ -513,10 +513,8 @@ export class GraphWidget extends Widget {
             nextCellIndex++;
             nextCodeCell = cells.get(nextCellIndex);
           }
-          console.log('nextCodeCell:', nextCodeCell);
 
           if (nextCodeCell && nextCodeCell.type === 'code') {
-            console.log('drawing line to next cell');
             const nextActiveIndex =
               this.alternativeManager.getActiveIndex(nextCodeCell);
             this.edges.add({
