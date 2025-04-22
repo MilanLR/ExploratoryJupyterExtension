@@ -20,7 +20,7 @@ import { AlternativeManager } from './alternativeManager';
 interface INotebookInfo {
   sourceCell: ICellModel;
   sourceNotebook: NotebookPanel;
-  tempNotebook: NotebookPanel;
+  tempNotebook: NotebookPanel | null;
   tempNotebookPath: string;
 }
 
@@ -67,21 +67,55 @@ export class NotebookManager {
     // first check if there is already a temp notebook for this source cell
     if (this.getTempNotebookForCell(sourceCell)) {
       console.log('Temp notebook already exists for this cell');
-      this.setTempNotebookFront(sourceCell);
-      return null;
+      const panel = this.setTempNotebookFront(sourceCell);
+      if (!panel) {
+        console.error('Failed to set temp notebook front');
+        return null;
+      }
+      return { panel, name: panel.context.path };
     }
 
     // Check if there's a saved notebook name in the metadata
     let notebookName = collapsedMetadata.notebookName;
     console.log('Notebook name:', notebookName);
-    let notebookExists = false;
 
     if (notebookName) {
       // Check if the notebook file exists
       try {
         await this.docManager.services.contents.get(notebookName);
-        notebookExists = true;
+        // Store the relationship between this temp notebook and the source cell
+        this.tempNotebooks.set(notebookName, {
+          sourceCell,
+          sourceNotebook,
+          tempNotebook: null,
+          tempNotebookPath: notebookName
+        });
+        const tempNotebook = (await this.docManager.open(
+          notebookName
+        )) as NotebookPanel;
+        this.tempNotebooks.set(notebookName, {
+          sourceCell,
+          sourceNotebook,
+          tempNotebook: tempNotebook,
+          tempNotebookPath: notebookName
+        });
+
+        // Set up event listeners for saving/closing
+        this.setupEventListeners(notebookName);
+
+        // Open the notebook in the main area
+        this.app.shell.add(tempNotebook, 'main');
+
+        // Emit signal that a temp notebook was activated
+        this.tempNotebookActivated.emit({
+          sourceCell,
+          sourceNotebook,
+          tempNotebook,
+          tempNotebookPath: notebookName
+        });
+
         console.log(`Found existing notebook: ${notebookName}`);
+        return { panel: tempNotebook, name: notebookName };
       } catch (error) {
         console.log(
           `Notebook ${notebookName} not found, will create a new one`
@@ -102,7 +136,7 @@ export class NotebookManager {
     );
 
     // If we don't have a notebook name or it doesn't exist, ask the user
-    if (!notebookExists || !notebookName) {
+    if (!notebookName) {
       console.log("No notebook name or it doesn't exist");
       // Create a proper input widget for the dialog
       const input = document.createElement('input');
@@ -149,7 +183,7 @@ export class NotebookManager {
       sourceNotebook.sessionContext.kernelPreference
     ) as NotebookPanel;
 
-    // Replace the model of the temp notebook with our created model
+    // Replace the model of the temp notebook with our created model if the notebook is new
     tempNotebook.context.model.fromJSON(tempModel.toJSON());
 
     // Store information about this temp notebook
@@ -162,9 +196,6 @@ export class NotebookManager {
 
     // Set up event listeners for saving/closing
     this.setupEventListeners(notebookName);
-
-    // Set notebook title to indicate it's a temporary view
-    tempNotebook.title.label = `Collapsed View: ${sourceNotebook.title.label}`;
 
     // Open the notebook in the main area
     this.app.shell.add(tempNotebook, 'main');
@@ -183,6 +214,11 @@ export class NotebookManager {
     }
 
     const { sourceCell, tempNotebook } = info;
+
+    if (!tempNotebook) {
+      console.error('Temp notebook not found:', tempNotebookPath);
+      return;
+    }
 
     // Convert the temp notebook cells to StoredNode format
     const storedNodes: IStoredNode[] = [];
@@ -225,7 +261,7 @@ export class NotebookManager {
   ): void {
     const tempNotebookPath = notebook.context.path;
     const info = this.tempNotebooks.get(tempNotebookPath);
-    if (!info) {
+    if (!info || !info.tempNotebook) {
       return;
     }
 
@@ -243,7 +279,7 @@ export class NotebookManager {
   public closeAllForNotebook(sourceNotebook: NotebookPanel): void {
     for (const [, info] of this.tempNotebooks.entries()) {
       if (info.sourceNotebook === sourceNotebook) {
-        this.closeNotebook(info.tempNotebook);
+        this.closeNotebook(info.tempNotebook!);
       }
     }
   }
@@ -259,12 +295,20 @@ export class NotebookManager {
 
     const { tempNotebook } = info;
 
-    // Save changes when the notebook is saved
-    tempNotebook.context.saveState.connect((_, state) => {
+    if (!tempNotebook) {
+      console.error('Temp notebook not found:', tempNotebookPath);
+      return;
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const connectSave = (_: any, state: any) => {
       if (state === 'completed') {
         this.saveChanges(tempNotebookPath);
       }
-    });
+    };
+
+    // Save changes when the notebook is saved
+    tempNotebook.context.saveState.connect(connectSave);
 
     // Override the close behavior to skip confirmation, but preserve data
     const originalClose = tempNotebook.close;
@@ -285,6 +329,9 @@ export class NotebookManager {
       // Remove from our tracking
       this.tempNotebooks.delete(tempNotebookPath);
 
+      // Disconnect the save state listener
+      tempNotebook.context.saveState.disconnect(connectSave);
+
       return result;
     };
 
@@ -295,21 +342,6 @@ export class NotebookManager {
         this.tempNotebooks.delete(tempNotebookPath);
       }
     });
-
-    // Add real-time change tracking for cell content changes
-    const model = tempNotebook.content.model;
-    if (model) {
-      // Listen for cell additions/removals
-      model.contentChanged.connect((_, args) => {
-        console.log('Cell change detected in temp notebook');
-        this.saveChanges(tempNotebookPath);
-
-        // Emit a signal that the graph widget can listen to
-        this.tempNotebookChanged.emit(tempNotebookPath);
-      });
-    }
-
-    // TODO Listen for notebook activation
   }
 
   /**
@@ -327,11 +359,13 @@ export class NotebookManager {
   /**
    * Put the temp notebook for a source cell in front.
    */
-  public setTempNotebookFront(sourceCell: ICellModel): void {
+  public setTempNotebookFront(sourceCell: ICellModel): NotebookPanel | null {
     const tempNotebook = this.getTempNotebookForCell(sourceCell);
     if (tempNotebook) {
       this.app.shell.activateById(tempNotebook.id);
+      return tempNotebook;
     }
+    return null;
   }
 
   /**

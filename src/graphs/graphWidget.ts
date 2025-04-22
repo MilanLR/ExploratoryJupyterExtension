@@ -64,9 +64,11 @@ export class GraphWidget extends Widget {
     this.zoomOutButton.innerHTML = 'Zoom Out';
     this.zoomOutButton.style.display = 'none';
     this.zoomOutButton.onclick = () => {
+      console.log('zoomstack:', this.zoomStack);
       if (this.zoomStack.length > 0) {
         const currentZoom = this.zoomStack.pop();
-
+        console.log('currentZoom:', currentZoom);
+        console.log('zoomstack:', this.zoomStack);
         // If we still have items in the zoom stack, bring the parent notebook to front
         if (this.zoomStack.length > 0) {
           const parentZoom = this.zoomStack[this.zoomStack.length - 1];
@@ -245,12 +247,14 @@ export class GraphWidget extends Widget {
                 console.error('Failed to open temp notebook');
                 return;
               }
-
+              console.log('pushing state, notebookInfo:', notebookInfo);
+              console.log('zoomstack:', this.zoomStack);
               this.zoomStack.push({
                 node: cell,
                 metadata: metadata,
                 notebookPanel: notebookInfo.panel
               });
+              console.log('zoomstack:', this.zoomStack);
               this.currentNotebookPanel = notebookInfo.panel;
               this.updateNotebookView();
             }
@@ -331,12 +335,6 @@ export class GraphWidget extends Widget {
       this.alternativeManager.switchToAlternative(cell, altIndex);
     });
 
-    // Listen for changes in temp notebooks
-    this.tempNotebookManager.tempNotebookChanged.connect(
-      this._onTempNotebookChanged,
-      this
-    );
-
     // Listen for temp notebook activation
     this.tempNotebookManager.tempNotebookActivated.connect(
       this._onTempNotebookActivated,
@@ -366,10 +364,6 @@ export class GraphWidget extends Widget {
       return;
     }
 
-    // if (this.parentNotebookPanel === notebook) {
-    //   return;
-    // }
-
     // Check if this notebook is in the zoom stack
     const zoomIndex = this.zoomStack.findIndex(
       zoomState => zoomState.notebookPanel === notebook
@@ -380,12 +374,19 @@ export class GraphWidget extends Widget {
       // but keep parent as is
       this.currentNotebookPanel = notebook;
       this.zoomStack = this.zoomStack.slice(0, zoomIndex + 1);
+      console.log('zoomstack1:', this.zoomStack);
     } else {
+      // If this is a temp notebook, return
+      if (this.tempNotebookManager.isTempNotebook(notebook)) {
+        console.log('Skipping temp notebook update:', notebook.context.path);
+        return;
+      }
       // This is a new notebook, set both parent and current
       this.parentNotebookPanel = notebook;
       this.currentNotebookPanel = notebook;
       // Clear zoom stack when switching to a new parent notebook
       this.zoomStack = [];
+      console.log('zoomstack2:', this.zoomStack);
     }
 
     this.updateNotebookView();
@@ -397,31 +398,6 @@ export class GraphWidget extends Widget {
     if (!notebook) {
       return;
     }
-
-    // // Check if this is a temp notebook and get its source info
-    // let sourceInfo: any = null;
-
-    // if (this.tempNotebookManager.isTempNotebook(notebook)) {
-    //   sourceInfo = this.tempNotebookManager.getSourceInfo(
-    //     notebook.context.path
-    //   );
-
-    //   // If we have source info, use the source notebook for our display
-    //   if (sourceInfo) {
-    //     // We'll still display the zoomed view, but make sure we have the latest data
-    //     // Update the zoom stack with fresh metadata if needed
-    //     if (this.zoomStack.length > 0) {
-    //       const currentZoom = this.zoomStack[this.zoomStack.length - 1];
-    //       // Refresh metadata from the source cell
-    //       const updatedMetadata = this.collapsedManager.getCollapsedMetadata(
-    //         sourceInfo.sourceCell
-    //       );
-    //       if (updatedMetadata) {
-    //         currentZoom.metadata = updatedMetadata;
-    //       }
-    //     }
-    //   }
-    // }
 
     // Clear existing nodes
     this.nodes.clear();
@@ -473,6 +449,7 @@ export class GraphWidget extends Widget {
       }
     }
 
+    let cellsCreated = -1;
     // Create a node for each cell
     for (let i = 0; i < cells.length; i++) {
       const cell = cells.get(i);
@@ -481,6 +458,7 @@ export class GraphWidget extends Widget {
       if (cell.type !== 'code') {
         continue;
       }
+      cellsCreated++;
 
       // Check if cell has alternatives
       const alternatives = this.alternativeManager.getAlternatives(cell);
@@ -507,7 +485,7 @@ export class GraphWidget extends Widget {
           shape: 'box',
           borderRadius: 8,
           x: startX + altIndex * this.xSpacing, // Center alternatives around xOffset
-          y: this.yOffset + i * this.ySpacing,
+          y: this.yOffset + cellsCreated * this.ySpacing,
           color: isCollapsed ? '#808080' : '#8dd3c7',
           borderWidth: altIndex === activeIndex ? 3 : 1,
           widthConstraint: {
@@ -524,12 +502,26 @@ export class GraphWidget extends Widget {
         // Add edge to next cell's alternatives if not the last cell
         if (i < cells.length - 1 && altIndex === activeIndex) {
           const nextCell = cells.get(i + 1);
-          if (nextCell && nextCell.type === 'code') {
+          // Find the next code cell if any
+          let nextCodeCell = nextCell;
+          let nextCellIndex = i + 1;
+          while (
+            nextCodeCell &&
+            nextCodeCell.type !== 'code' &&
+            nextCellIndex < cells.length - 1
+          ) {
+            nextCellIndex++;
+            nextCodeCell = cells.get(nextCellIndex);
+          }
+          console.log('nextCodeCell:', nextCodeCell);
+
+          if (nextCodeCell && nextCodeCell.type === 'code') {
+            console.log('drawing line to next cell');
             const nextActiveIndex =
-              this.alternativeManager.getActiveIndex(nextCell);
+              this.alternativeManager.getActiveIndex(nextCodeCell);
             this.edges.add({
               from: `${i + 1}-alt-${altIndex + 1}`,
-              to: `${i + 2}-alt-${nextActiveIndex + 1}`,
+              to: `${nextCellIndex + 1}-alt-${nextActiveIndex + 1}`,
               width: 1
             });
           }
@@ -566,63 +558,6 @@ export class GraphWidget extends Widget {
       '<div style="text-align: center;">Please open a notebook to start using this extension</div>';
   }
 
-  private lock = false;
-  // Add a method to handle temp notebook changes
-  private _onTempNotebookChanged = (
-    sender: NotebookManager,
-    tempNotebookPath: string
-  ): void => {
-    if (this.lock) {
-      return;
-    }
-    this.lock = true;
-
-    console.log(
-      'Graph widget notified of temp notebook change:',
-      tempNotebookPath
-    );
-
-    // Get the source info for this temp notebook
-    const sourceInfo = this.tempNotebookManager.getSourceInfo(tempNotebookPath);
-    if (!sourceInfo) {
-      return;
-    }
-
-    // Check if the temp notebook is in the zoom stack
-    const tempNotebookIndex = this.zoomStack.findIndex(
-      zoomState => zoomState.notebookPanel === sourceInfo.tempNotebook
-    );
-
-    if (tempNotebookIndex >= 0) {
-      console.log(
-        'Temp notebook already in zoom stack at index:',
-        tempNotebookIndex
-      );
-      // If it's already in the zoom stack, we don't need to add it again
-      return;
-    }
-
-    // If not in zoom stack and we have source info, add it to the zoom stack
-    if (sourceInfo.sourceCell && sourceInfo.tempNotebook) {
-      const metadata = this.collapsedManager.getCollapsedMetadata(
-        sourceInfo.sourceCell
-      );
-
-      if (metadata) {
-        this.zoomStack.push({
-          node: sourceInfo.sourceCell,
-          metadata: metadata,
-          notebookPanel: sourceInfo.tempNotebook
-        });
-
-        this.currentNotebookPanel = sourceInfo.tempNotebook;
-        this.updateNotebookView();
-        console.log('Added temp notebook to zoom stack:', tempNotebookPath);
-      }
-    }
-    this.lock = false;
-  };
-
   // Add a method to handle temp notebook activation
   private _onTempNotebookActivated = (
     sender: NotebookManager,
@@ -649,20 +584,6 @@ export class GraphWidget extends Widget {
         this.updateNotebookView();
       }
       return;
-    }
-
-    // If not in zoom stack, we need to add it
-    const metadata = this.collapsedManager.getCollapsedMetadata(
-      info.sourceCell
-    );
-    if (metadata) {
-      this.zoomStack.push({
-        node: info.sourceCell,
-        metadata: metadata,
-        notebookPanel: info.tempNotebook
-      });
-      this.currentNotebookPanel = info.tempNotebook;
-      this.updateNotebookView();
     }
   };
 
